@@ -1,0 +1,27 @@
+﻿using KSA;
+
+namespace KittenEngineerRedux.Analysis;
+
+internal static class EnvironmentHelpers
+{
+    public static float ComputeSurfaceGravity(IParentBody? body)
+    {
+        if (body == null)
+            return 0f;
+        double r = body.MeanRadius;
+        if (r <= 0.0)
+            return 0f;
+        return (float)(Constants.GRAVITATIONAL_CONSTANT * body.Mass / (r * r));
+    }
+
+    public static float GetSeaLevelPressure(IParentBody? body)
+    {
+        if (body is Astronomical astro)
+        {
+            var atmo = astro.GetAtmosphereReference();
+            if (atmo != null)
+                return (float)(double)atmo.Physical.SeaLevelPressure;
+        }
+        return 0f;
+    }
+}
