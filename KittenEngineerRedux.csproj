@@ -1,69 +1,84 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-	<PropertyGroup>
-		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
-		<CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
-	</PropertyGroup>
-	<ItemGroup>
-		<PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
-		<PackageReference Include="Lib.Harmony" Version="2.4.2">
-			<PrivateAssets>all</PrivateAssets>
-		</PackageReference>
-		<PackageReference Include="ModMenu.Attributes" Version="1.0.2" />
-		<PackageReference Include="StarMap.API" Version="0.3.6" />
-	</ItemGroup>
-	<ItemGroup>
-		<Reference Update="KSA">
-			<HintPath>C:\Program Files\Kitten Space Agency\KSA.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-	</ItemGroup>
-	<ItemGroup>
-		<Reference Include="BepuUtilities">
-		  <HintPath>C:\Program Files\Kitten Space Agency\BepuUtilities.dll</HintPath>
-		</Reference>
-		<Reference Include="Brutal.Core.Common">
-		  <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Common.dll</HintPath>
-		</Reference>
-		<Reference Include="Brutal.Core.Logging">
-		  <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Logging.dll</HintPath>
-		</Reference>
-		<Reference Include="Brutal.Core.Numerics">
-			<HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Numerics.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-		<Reference Include="Brutal.Glfw">
-			<HintPath>C:\Program Files\Kitten Space Agency\Brutal.Glfw.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-		<Reference Include="Brutal.ImGui">
-			<HintPath>C:\Program Files\Kitten Space Agency\Brutal.ImGui.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-		<Reference Include="Brutal.ImGui.Extensions">
-			<HintPath>C:\Program Files\Kitten Space Agency\Brutal.ImGui.Extensions.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-		<Reference Include="KSA_NOT">
-			<HintPath>C:\Program Files\Kitten Space Agency\KSA.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-		<Reference Include="Brutal.Core.Strings">
-			<HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Strings.dll</HintPath>
-			<Private>false</Private>
-		</Reference>
-		<Reference Include="ModMenu.Attributes">
-			<HintPath>$(ProjectDir)libs\ModMenu.Attributes.dll</HintPath>
-			<Private>true</Private>
-		</Reference>
-	</ItemGroup>
-	<ItemGroup>
-		<None Update="mod.toml">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</None>
-		<None Update="libs\ModMenu.Attributes.dll">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</None>
-	</ItemGroup>
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
+        <PackageReference Include="Lib.Harmony" Version="2.4.2">
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="StarMap.API" Version="0.3.6" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="KSA">
+            <HintPath>C:\Program Files\Kitten Space Agency\KSA.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+
+        <Reference Include="ModMenu.Attributes">
+          <HintPath>C:\Users\Matthew\Documents\My Games\Kitten Space Agency\mods\KittenEngineerRedux\ModMenu.Attributes.dll</HintPath>
+          <Private>true</Private>
+        </Reference>
+
+        <Reference Include="BepuUtilities">
+          <HintPath>C:\Program Files\Kitten Space Agency\BepuUtilities.dll</HintPath>
+          <Private>false</Private>
+        </Reference>
+        <Reference Include="Brutal.Core.Common">
+          <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Common.dll</HintPath>
+          <Private>false</Private>
+        </Reference>
+        <Reference Include="Brutal.Core.Logging">
+          <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Logging.dll</HintPath>
+          <Private>false</Private>
+        </Reference>
+        <Reference Include="Brutal.Core.Numerics">
+            <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Numerics.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Brutal.Glfw">
+            <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Glfw.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Brutal.ImGui">
+            <HintPath>C:\Program Files\Kitten Space Agency\Brutal.ImGui.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Brutal.ImGui.Extensions">
+            <HintPath>C:\Program Files\Kitten Space Agency\Brutal.ImGui.Extensions.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Brutal.Core.Strings">
+            <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Strings.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Update="mod.toml">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+    <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+        <PropertyGroup>
+            <SourceDll>$(TargetDir)KittenEngineerRedux.dll</SourceDll>
+            <SourceAttributesDll>$(TargetDir)ModMenu.Attributes.dll</SourceAttributesDll>
+            <DestinationDir>C:\Users\Matthew\Documents\My Games\Kitten Space Agency\mods\KittenEngineerRedux\</DestinationDir>
+        </PropertyGroup>
+        
+        <Message Importance="High" Text="Executing Post-Build Deployment..." />
+        
+        <MakeDir Directories="$(DestinationDir)" Condition="!Exists('$(DestinationDir)')" />
+        
+        <Copy SourceFiles="$(SourceDll)" DestinationFolder="$(DestinationDir)" SkipUnchangedFiles="false" />
+        <Copy SourceFiles="$(SourceAttributesDll)" DestinationFolder="$(DestinationDir)" SkipUnchangedFiles="false" Condition="Exists('$(SourceAttributesDll)')" />
+        
+        <Message Importance="High" Text="Mod successfully deployed to: $(DestinationDir)" />
+    </Target>
 </Project>

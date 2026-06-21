@@ -51,7 +51,6 @@ internal static class FlightHud
             y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Build", BuildMarker.Stamp);
             y += 4f;
 
-            // --- ORBIT ---
             if (PanelKit.DrawCollapsibleSection(origin, y, "ORBIT"u8, out float nextY))
             {
                 y = nextY;
@@ -73,7 +72,6 @@ internal static class FlightHud
                 y = nextY;
             }
 
-            // --- VELOCITY ---
             if (PanelKit.DrawCollapsibleSection(origin, y, "VELOCITY"u8, out nextY))
             {
                 y = nextY;
@@ -86,7 +84,6 @@ internal static class FlightHud
                 y = nextY;
             }
 
-            // --- SURFACE ---
             if (PanelKit.DrawCollapsibleSection(origin, y, "SURFACE"u8, out nextY))
             {
                 y = nextY;
@@ -101,7 +98,6 @@ internal static class FlightHud
                 y = nextY;
             }
 
-            // --- SUICIDE BURN ---
             if (PanelKit.DrawCollapsibleSection(origin, y, "SUICIDE BURN"u8, out nextY))
             {
                 y = nextY;
@@ -113,7 +109,6 @@ internal static class FlightHud
                 y = nextY;
             }
 
-            // --- STAGE DELTA-V ---
             if (PanelKit.DrawCollapsibleSection(origin, y, "STAGE DELTA-V"u8, out nextY))
             {
                 y = nextY;

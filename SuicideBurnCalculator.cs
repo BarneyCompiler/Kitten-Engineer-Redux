@@ -1,4 +1,5 @@
 ﻿using KSA;
+using System;
 
 namespace KittenEngineerRedux.Analysis;
 
@@ -14,36 +15,66 @@ internal static class SuicideBurnCalculator
 {
     public static SuicideBurnInfo Compute(Vehicle vehicle, OrbitSummary orbit)
     {
-        IParentBody parent = vehicle.Parent;
-        double radius = vehicle.Orbit.StateVectors.PositionCci.Length();
-        double localGravity = radius > 0.0
-            ? Constants.GRAVITATIONAL_CONSTANT * parent.Mass / (radius * radius)
-            : 0.0;
+        double radarAltitude = vehicle.GetRadarAltitude();
+        double verticalVelocity = orbit.VerticalVelocity;
+        double surfaceSpeed = vehicle.GetSurfaceSpeed();
+        
+        bool isDescending = verticalVelocity < 0.0;
+        double descentRate = -verticalVelocity;
 
         float ambientPressure = (float)vehicle.PhysicsEnvironment.AtmosphericPressure;
         ActiveEngineThrustInfo engines = ActiveEngineThrust.Compute(vehicle.Parts, ambientPressure);
-        float mass = vehicle.TotalMass;
+        double massInitial = vehicle.TotalMass;
 
-        double descentRate = -orbit.VerticalVelocity;
-        bool isDescending = descentRate > 0.0;
-
-        double thrustAccel = mass > 0f ? engines.TotalThrust / mass : 0.0;
-        double netDeceleration = thrustAccel - localGravity;
-
-        if (engines.TotalThrust <= 0f || netDeceleration <= 0.0)
+        if (engines.TotalThrust <= 0f || engines.TotalMassFlowRate <= 0f || massInitial <= 0.0)
             return new SuicideBurnInfo(false, isDescending, false, 0f, null, 0f);
 
-        double surfaceSpeed = vehicle.GetSurfaceSpeed();
-        double burnAltitude = surfaceSpeed * surfaceSpeed / (2.0 * netDeceleration);
-        double burnDuration = surfaceSpeed / netDeceleration;
+        IParentBody parent = vehicle.Parent;
+        double currentRadius = vehicle.Orbit.StateVectors.PositionCci.Length();
+        double surfaceRadius = parent.GetNearSurfaceRadius();
+        double gravityCurrent = currentRadius > 0.0 ? parent.Mu / (currentRadius * currentRadius) : 0.0;
+        double gravitySurface = surfaceRadius > 0.0 ? parent.Mu / (surfaceRadius * surfaceRadius) : gravityCurrent;
+        double localGravity = (gravityCurrent + gravitySurface) * 0.5;
+        double massFlowRate = engines.TotalMassFlowRate;
+        double initialThrustAccel = engines.TotalThrust / massInitial;
 
-        double radarAltitude = vehicle.GetRadarAltitude();
+        if ((initialThrustAccel - localGravity) <= 0.0)
+            return new SuicideBurnInfo(false, isDescending, false, 0f, null, 0f);
+
+        double thrustToMassRatio = engines.TotalThrust / massInitial;
+        double burnDuration = surfaceSpeed / (thrustToMassRatio + (0.5 * massFlowRate * surfaceSpeed / massInitial) - localGravity);
+
+        if (burnDuration < 0.0 || double.IsNaN(burnDuration))
+            return new SuicideBurnInfo(false, isDescending, false, 0f, null, 0f);
+
+        double pitchAngle = surfaceSpeed > 0.0 ? System.Math.Asin(descentRate / surfaceSpeed) : System.Math.PI * 0.5;
+        
+        double massFinal = massInitial - (massFlowRate * burnDuration);
+        if (massFinal < 0.1) massFinal = 0.1; 
+
+        double averageThrustAccel = engines.TotalThrust / ((massInitial + massFinal) * 0.5);
+        double netDecelDynamic = averageThrustAccel - (localGravity * System.Math.Sin(pitchAngle));
+
+        if (netDecelDynamic <= 0.0)
+            return new SuicideBurnInfo(false, isDescending, false, 0f, null, 0f);
+
+        double burnDistance = (surfaceSpeed * surfaceSpeed) / (2.0 * netDecelDynamic);
+        double burnAltitude = burnDistance * System.Math.Sin(pitchAngle);
         bool burnNow = radarAltitude <= burnAltitude;
 
         float? timeToBurn = null;
         if (!burnNow && isDescending)
+        {
             timeToBurn = (float)((radarAltitude - burnAltitude) / descentRate);
+        }
 
-        return new SuicideBurnInfo(true, isDescending, burnNow, (float)burnAltitude, timeToBurn, (float)burnDuration);
+        return new SuicideBurnInfo(
+            HasSufficientThrust: true,
+            IsDescending: isDescending,
+            BurnNow: burnNow,
+            BurnAltitude: (float)burnAltitude,
+            TimeToBurn: timeToBurn,
+            BurnDuration: (float)burnDuration
+        );
     }
 }
