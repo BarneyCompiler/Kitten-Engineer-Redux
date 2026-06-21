@@ -10,7 +10,7 @@
 		<PackageReference Include="Lib.Harmony" Version="2.4.2">
 			<PrivateAssets>all</PrivateAssets>
 		</PackageReference>
-		<PackageReference Include="ModMenu.Attributes" Version="1.0.1" />
+		<PackageReference Include="ModMenu.Attributes" Version="1.0.2" />
 		<PackageReference Include="StarMap.API" Version="0.3.6" />
 	</ItemGroup>
 	<ItemGroup>
@@ -20,6 +20,9 @@
 		</Reference>
 	</ItemGroup>
 	<ItemGroup>
+		<Reference Include="BepuUtilities">
+		  <HintPath>C:\Program Files\Kitten Space Agency\BepuUtilities.dll</HintPath>
+		</Reference>
 		<Reference Include="Brutal.Core.Common">
 		  <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Common.dll</HintPath>
 		</Reference>
