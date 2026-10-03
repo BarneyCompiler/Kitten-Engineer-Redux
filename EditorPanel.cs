@@ -11,7 +11,8 @@ internal static class EditorPanel
     private const float DefaultWidth = 300f;
     private const float SidePadding = 16f;
 
-    private static bool _useSeaLevel;
+    private static bool _useAtmosphere = true;
+    private static float _analysisAltitude;
 
     public static bool Visible { get; set; } = true;
 
@@ -26,18 +27,17 @@ internal static class EditorPanel
 
         VehicleMassSummary mass = MassAnalyzer.Analyze(parts);
 
-        float ambientPressure = 0f;
-        float surfaceGravity = 0f;
-        if (_useSeaLevel)
-        {
-            IParentBody? home = Universe.CurrentSystem?.HomeBody;
-            ambientPressure = EnvironmentHelpers.GetSeaLevelPressure(home);
-            surfaceGravity = EnvironmentHelpers.ComputeSurfaceGravity(home);
-        }
+        IParentBody? home = Universe.CurrentSystem?.HomeBody;
+        float maxAnalysisAltitude = EnvironmentHelpers.GetAtmosphereHeight(home);
+        _analysisAltitude = Math.Clamp(_analysisAltitude, 0f, maxAnalysisAltitude);
+        float ambientPressure = _useAtmosphere
+            ? EnvironmentHelpers.GetAtmosphericPressureAtAltitude(home, _analysisAltitude)
+            : 0f;
+        float surfaceGravity = EnvironmentHelpers.ComputeSurfaceGravity(home, _analysisAltitude);
 
         VehicleBurnAnalysis burn = SequenceAnalyzer.Analyze(parts, mass.WetMass, ambientPressure, surfaceGravity);
 
-        float defaultHeight = 150f + burn.Sequences.Count * PanelKit.RowHeight + PanelKit.RowHeight;
+        float defaultHeight = 420f + burn.Sequences.Count * PanelKit.RowHeight * 8f;
         float2 defaultPos = viewport.Position + new float2(viewport.Size.X - DefaultWidth - SidePadding, 60f);
 
         bool open = PanelKit.BeginWindow("Kitten Engineer Redux###KerEditorPanel"u8, defaultPos, new float2(DefaultWidth, defaultHeight));
@@ -54,20 +54,53 @@ internal static class EditorPanel
             y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Dry Mass", PanelKit.FormatMass(mass.DryMass));
             y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Wet Mass", PanelKit.FormatMass(mass.WetMass));
             y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Propellant", PanelKit.FormatMass(mass.PropellantMass));
+            y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Total parts", mass.PartCount.ToString());
 
             y += 6f;
-            y = PanelKit.DrawTwoWayToggle(dl, origin, contentWidth, y, "Vacuum", "Sea Level", _useSeaLevel,
-                "##KerEditorToggleVac", "##KerEditorToggleSea", out bool clickedSea, out bool clickedVac);
-            if (clickedSea) _useSeaLevel = true;
-            if (clickedVac) _useSeaLevel = false;
+            y = PanelKit.DrawTwoWayToggle(dl, origin, contentWidth, y, "Vacuum", "Atmosphere", _useAtmosphere,
+                "##KerEditorToggleVac", "##KerEditorToggleAtmo", out bool clickedAtmosphere, out bool clickedVacuum);
+            bool conditionsChanged = false;
+            if (clickedAtmosphere) { _useAtmosphere = true; conditionsChanged = true; }
+            if (clickedVacuum) { _useAtmosphere = false; conditionsChanged = true; }
+            if (_useAtmosphere && maxAnalysisAltitude > 0f)
+            {
+                y = PanelKit.DrawSliderRow(dl, origin, contentWidth, y,
+                    "Analysis altitude", "##KerEditorAnalysisAltitude"u8, ref _analysisAltitude,
+                    0f, maxAnalysisAltitude, "%.0f m", out bool altitudeChanged);
+                conditionsChanged |= altitudeChanged;
+                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Pressure",
+                    PanelKit.FormatPressure(EnvironmentHelpers.GetAtmosphericPressureAtAltitude(home, _analysisAltitude)));
+            }
+            else if (_useAtmosphere)
+            {
+                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Atmosphere", "Not available");
+            }
+
+            if (conditionsChanged)
+            {
+                ambientPressure = _useAtmosphere
+                    ? EnvironmentHelpers.GetAtmosphericPressureAtAltitude(home, _analysisAltitude)
+                    : 0f;
+                surfaceGravity = EnvironmentHelpers.ComputeSurfaceGravity(home, _analysisAltitude);
+                burn = SequenceAnalyzer.Analyze(parts, mass.WetMass, ambientPressure, surfaceGravity);
+            }
 
             y += 4f;
             y = PanelKit.DrawSectionHeader(dl, origin, contentWidth, y, "STAGE DELTA-V");
             foreach (SequenceBurnInfo stage in burn.Sequences)
             {
-                string label = $"Stage {stage.SequenceNumber}";
-                string value = $"{stage.DeltaV:F0} m/s  TWR {stage.Twr:F2}";
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, label, value);
+                y = PanelKit.DrawSectionHeader(dl, origin, contentWidth, y, $"STAGE {stage.SequenceNumber}");
+                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Delta-v / cumulative",
+                    $"{stage.DeltaV:F0} / {stage.CumulativeDeltaV:F0} m/s");
+                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Burn / Isp",
+                    $"{stage.BurnTime:F0} s / {stage.Isp:F0} s");
+                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Thrust / engines",
+                    $"{PanelKit.FormatThrust(stage.Thrust)} / {stage.EngineCount}");
+                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "TWR initial / max",
+                    $"{stage.InitialTwr:F2} / {stage.MaxTwr:F2}");
+                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Wet / dry mass",
+                    $"{PanelKit.FormatMass(stage.WetMass)} / {PanelKit.FormatMass(stage.DryMass)}");
+                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Craft parts remaining", stage.PartCount.ToString());
             }
             y = PanelKit.DrawTotalRow(dl, origin, contentWidth, y, "Total dV", $"{burn.TotalDeltaV:F0} m/s");
 

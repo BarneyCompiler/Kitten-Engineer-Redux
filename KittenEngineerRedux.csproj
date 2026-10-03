@@ -7,6 +7,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Compile Remove="KSA_Source/**/*.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
         <PackageReference Include="Lib.Harmony" Version="2.4.2">
             <PrivateAssets>all</PrivateAssets>

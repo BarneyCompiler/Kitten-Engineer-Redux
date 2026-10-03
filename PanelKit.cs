@@ -81,12 +81,47 @@ internal static class PanelKit
 
     public static float DrawRow(ImDrawListPtr dl, float2 origin, float width, float y, string label, string value, bool warning = false)
     {
+        float availableWidth = Math.Max(0f, width - 8f);
+        float2 labelSize = ImGui.CalcTextSize(label);
+        float2 valueSize = ImGui.CalcTextSize(value);
+        float gap = ImGui.GetStyle().ItemSpacing.X;
+
+        if (labelSize.X + valueSize.X + gap <= availableWidth)
+        {
+            float2 inlineLabelPos = new float2(origin.X, y);
+            dl.AddText(in inlineLabelPos, ToColor(LabelColor), label);
+            float2 inlineValuePos = new float2(origin.X + width - valueSize.X, y);
+            dl.AddText(in inlineValuePos, ToColor(warning ? WarningColor : ValueColor), value);
+            return y + RowHeight;
+        }
+
+        float lineHeight = ImGui.GetTextLineHeight();
         float2 labelPos = new float2(origin.X, y);
         dl.AddText(in labelPos, ToColor(LabelColor), label);
-        float2 valueSize = ImGui.CalcTextSize(value);
-        float2 valuePos = new float2(origin.X + width - valueSize.X, y);
+        float valueX = Math.Max(origin.X, origin.X + width - valueSize.X);
+        float2 valuePos = new float2(valueX, y + lineHeight + 2f);
         dl.AddText(in valuePos, ToColor(warning ? WarningColor : ValueColor), value);
-        return y + RowHeight;
+        return y + Math.Max(RowHeight, lineHeight * 2f + 2f);
+    }
+
+    public static float DrawSliderRow(
+        ImDrawListPtr dl, float2 origin, float width, float y, string label, ReadOnlySpan<byte> id,
+        ref float value, float min, float max, string format, out bool changed)
+    {
+        float rowHeight = Math.Max(RowHeight, ImGui.GetFrameHeight());
+        float lineHeight = ImGui.GetTextLineHeight();
+        float labelWidth = Math.Min(ImGui.CalcTextSize(label).X + 8f, width * 0.42f);
+        float sliderWidth = Math.Max(80f, width - labelWidth - 8f);
+        float2 labelPos = new float2(origin.X, y + (rowHeight - lineHeight) * 0.5f);
+        dl.AddText(in labelPos, ToColor(LabelColor), label);
+
+        float sliderHeight = ImGui.GetFrameHeight();
+        ImGui.SetCursorScreenPos(new float2(
+            origin.X + width - sliderWidth,
+            y + (rowHeight - sliderHeight) * 0.5f));
+        ImGui.SetNextItemWidth(sliderWidth);
+        changed = ImGui.SliderFloat(id, ref value, min, max, format);
+        return y + rowHeight;
     }
 
     public static float DrawTotalRow(ImDrawListPtr dl, float2 origin, float width, float y, string label, string value)
@@ -138,6 +173,18 @@ internal static class PanelKit
     public static string FormatMass(float kg)
     {
         return kg >= 1000f ? $"{kg / 1000f:F2} t" : $"{kg:F1} kg";
+    }
+
+    public static string FormatPressure(float pascals)
+    {
+        return pascals >= 1000f ? $"{pascals / 1000f:F1} kPa" : $"{pascals:F0} Pa";
+    }
+
+    public static string FormatThrust(float newtons)
+    {
+        if (newtons >= 1_000_000f)
+            return $"{newtons / 1_000_000f:F2} MN";
+        return newtons >= 1000f ? $"{newtons / 1000f:F1} kN" : $"{newtons:F0} N";
     }
 
     public static string FormatDuration(double seconds)

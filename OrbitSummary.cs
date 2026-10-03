@@ -10,8 +10,12 @@ internal readonly record struct OrbitSummary(
     double? Period,
     double? TimeToApoapsis,
     double TimeToPeriapsis,
+    double? TimeToAscendingNode,
+    double? TimeToDescendingNode,
     double Inclination,
     double Eccentricity,
+    double3 EccentricityVector,
+    double3 OrbitalNormal,
     double SemiMajorAxis,
     double LongitudeOfAscendingNode,
     double ArgumentOfPeriapsis,
@@ -42,11 +46,25 @@ internal static class OrbitSummaryCalculator
         double? timeToApoapsis = isBound ? (vehicle.NextApoapsisTime - now).Seconds() : null;
         double timeToPeriapsis = (vehicle.NextPeriapsisTime - now).Seconds();
 
+        double? timeToAscendingNode = null;
+        double? timeToDescendingNode = null;
+        if (isBound && Math.Abs(Math.Sin(orbit.Inclination)) > 1e-8)
+        {
+            double argumentOfPeriapsis = orbit.ArgumentOfPeriapsis;
+            timeToAscendingNode = orbit.GetRemainingTimeTo(new TrueAnomaly(WrapRadians(-argumentOfPeriapsis))).Seconds();
+            timeToDescendingNode = orbit.GetRemainingTimeTo(new TrueAnomaly(WrapRadians(Math.PI - argumentOfPeriapsis))).Seconds();
+        }
+
         double3 positionCci = orbit.StateVectors.PositionCci;
         double3 velocityCci = orbit.StateVectors.VelocityCci;
+        double3 radial = positionCci.NormalizeOrZero();
+        double3 angularMomentum = double3.Cross(positionCci, velocityCci);
+        double3 eccentricityVector = orbit.Mu > 0.0
+            ? double3.Cross(velocityCci, angularMomentum) / orbit.Mu - radial
+            : double3.Zero;
+        double3 orbitalNormal = angularMomentum.NormalizeOrZero();
         double3 angularVelocityCci = orbit.Parent.GetAngularVelocityCci();
         double3 surfaceVelocity = velocityCci - double3.Cross(angularVelocityCci, positionCci);
-        double3 radial = positionCci.NormalizeOrZero();
         double vertical = double3.Dot(surfaceVelocity, radial);
         double3 horizontalVector = surfaceVelocity - vertical * radial;
         double horizontal = horizontalVector.Length();
@@ -60,8 +78,12 @@ internal static class OrbitSummaryCalculator
             period,
             timeToApoapsis,
             timeToPeriapsis,
+            timeToAscendingNode,
+            timeToDescendingNode,
             orbit.Inclination,
             orbit.Eccentricity,
+            eccentricityVector,
+            orbitalNormal,
             orbit.SemiMajorAxis,
             orbit.LongitudeOfAscendingNode,
             orbit.ArgumentOfPeriapsis,
@@ -72,5 +94,11 @@ internal static class OrbitSummaryCalculator
             lla.Y,
             vehicle.GetRadarAltitude(),
             vehicle.GetBarometricAltitude());
+    }
+
+    private static double WrapRadians(double angle)
+    {
+        angle %= Math.PI * 2.0;
+        return angle < 0.0 ? angle + Math.PI * 2.0 : angle;
     }
 }

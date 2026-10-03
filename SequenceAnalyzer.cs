@@ -10,6 +10,7 @@ internal record struct SequenceBurnInfo
     public int SequenceNumber;
     public bool IsActivated;
     public float DeltaV;
+    public float CumulativeDeltaV;
     public float BurnTime;
     public float Thrust;
     public float ExhaustVelocity;
@@ -20,7 +21,11 @@ internal record struct SequenceBurnInfo
     public float MaxFuelMass;
     public float FuelFraction;
     public float MassFlowRate;
-    public float Twr;
+    public float InitialTwr;
+    public float MaxTwr;
+    public float WetMass;
+    public float DryMass;
+    public int PartCount;
     public float JettisonedMass;
     public int EngineCount;
 }
@@ -66,6 +71,7 @@ internal static class SequenceAnalyzer
         ReadOnlySpan<Sequence> sequences = parts.SequenceList.Sequences;
         ReadOnlySpan<MoleState> moleStates = parts.Moles.States;
         float currentMass = totalMass;
+        float currentDryMass = parts.ComputeInertMassPropertiesAsmb().Props.Mass;
 
         for (int si = 0; si < sequences.Length; si++)
         {
@@ -73,8 +79,10 @@ internal static class SequenceAnalyzer
             if (sequence.Parts.IsEmpty)
                 continue;
 
-            float jettisonedMass = ComputeJettisonedMass(sequence, moleStates, _pooledJettisonedPartIds, _pooledFuelClaimedTankIds);
+            (float jettisonedMass, float jettisonedDryMass) = ComputeJettisonedMass(
+                sequence, moleStates, _pooledJettisonedPartIds, _pooledFuelClaimedTankIds);
             currentMass -= jettisonedMass;
+            currentDryMass = Math.Max(0f, currentDryMass - jettisonedDryMass);
 
             CollectEngines(sequence, _pooledJettisonedPartIds, sequence.Activated);
             if (_pooledEngines.Count == 0)
@@ -118,13 +126,16 @@ internal static class SequenceAnalyzer
             float endMass = currentMass - burnableFuel;
             float dv = burnableFuel > 0f ? ve * MathF.Log(startMass / endMass) : 0f;
             float burnTime = burnableFuel / totalFlowRate;
-            float twr = surfaceGravity > 0f ? totalThrust / (startMass * surfaceGravity) : 0f;
+            float initialTwr = surfaceGravity > 0f ? totalThrust / (startMass * surfaceGravity) : 0f;
+            float maxTwr = surfaceGravity > 0f && endMass > 0f ? totalThrust / (endMass * surfaceGravity) : 0f;
+            float cumulativeDeltaV = result.TotalDeltaV + dv;
 
             result.Sequences.Add(new SequenceBurnInfo
             {
                 SequenceNumber = sequence.Number,
                 IsActivated = sequence.Activated,
                 DeltaV = dv,
+                CumulativeDeltaV = cumulativeDeltaV,
                 BurnTime = burnTime,
                 Thrust = totalThrust,
                 ExhaustVelocity = ve,
@@ -135,7 +146,11 @@ internal static class SequenceAnalyzer
                 MaxFuelMass = maxFuelMass,
                 FuelFraction = fuelFraction,
                 MassFlowRate = totalFlowRate,
-                Twr = twr,
+                InitialTwr = initialTwr,
+                MaxTwr = maxTwr,
+                WetMass = startMass,
+                DryMass = currentDryMass,
+                PartCount = CountRemainingParts(parts, _pooledJettisonedPartIds),
                 JettisonedMass = jettisonedMass,
                 EngineCount = _pooledEngines.Count
             });
@@ -218,54 +233,83 @@ internal static class SequenceAnalyzer
         return (current, max);
     }
 
-    private static float ComputeJettisonedMass(
+    private static (float Mass, float DryMass) ComputeJettisonedMass(
         Sequence sequence, ReadOnlySpan<MoleState> moleStates,
         HashSet<uint> jettisonedPartIds, HashSet<ulong> fuelClaimedTankIds)
     {
         float totalJettisoned = 0f;
+        float totalJettisonedDryMass = 0f;
         ReadOnlySpan<Part> parts = sequence.Parts;
         for (int pi = 0; pi < parts.Length; pi++)
         {
             Part part = parts[pi];
             if (!part.Modules.HasAny<Decoupler>())
                 continue;
-            totalJettisoned += CollectSubtreeMass(part, moleStates, jettisonedPartIds, fuelClaimedTankIds);
+            (float mass, float dryMass) = CollectSubtreeMass(part, moleStates, jettisonedPartIds, fuelClaimedTankIds);
+            totalJettisoned += mass;
+            totalJettisonedDryMass += dryMass;
         }
-        return totalJettisoned;
+        return (totalJettisoned, totalJettisonedDryMass);
     }
 
-    private static float CollectSubtreeMass(
+    private static (float Mass, float DryMass) CollectSubtreeMass(
         Part part, ReadOnlySpan<MoleState> moleStates,
         HashSet<uint> jettisonedPartIds, HashSet<ulong> fuelClaimedTankIds)
     {
         if (!jettisonedPartIds.Add(part.InstanceId))
-            return 0f;
+            return (0f, 0f);
 
-        float mass = ComputePartMass(part, moleStates, fuelClaimedTankIds);
+        (float mass, float dryMass) = ComputePartMass(part, moleStates, fuelClaimedTankIds);
         List<Part> children = part.TreeChildren;
         for (int i = 0; i < children.Count; i++)
-            mass += CollectSubtreeMass(children[i], moleStates, jettisonedPartIds, fuelClaimedTankIds);
-        return mass;
+        {
+            (float childMass, float childDryMass) = CollectSubtreeMass(
+                children[i], moleStates, jettisonedPartIds, fuelClaimedTankIds);
+            mass += childMass;
+            dryMass += childDryMass;
+        }
+        return (mass, dryMass);
     }
 
-    private static float ComputePartMass(Part part, ReadOnlySpan<MoleState> moleStates, HashSet<ulong> fuelClaimedTankIds)
+    private static (float Mass, float DryMass) ComputePartMass(
+        Part part, ReadOnlySpan<MoleState> moleStates, HashSet<ulong> fuelClaimedTankIds)
     {
-        float mass = SumComponentMass(part.Modules, moleStates, fuelClaimedTankIds);
+        (float mass, float dryMass) = SumComponentMass(part.Modules, moleStates, fuelClaimedTankIds);
         ReadOnlySpan<Part> subParts = part.SubParts;
         for (int i = 0; i < subParts.Length; i++)
-            mass += SumComponentMass(subParts[i].Modules, moleStates, fuelClaimedTankIds);
-        return mass;
+        {
+            (float subPartMass, float subPartDryMass) = SumComponentMass(
+                subParts[i].Modules, moleStates, fuelClaimedTankIds);
+            mass += subPartMass;
+            dryMass += subPartDryMass;
+        }
+        return (mass, dryMass);
     }
 
-    private static float SumComponentMass(ModuleList components, ReadOnlySpan<MoleState> moleStates, HashSet<ulong> fuelClaimedTankIds)
+    private static (float Mass, float DryMass) SumComponentMass(
+        ModuleList components, ReadOnlySpan<MoleState> moleStates, HashSet<ulong> fuelClaimedTankIds)
     {
-        float mass = MassHelpers.SumInertMass(components);
+        float dryMass = MassHelpers.SumInertMass(components);
+        float mass = dryMass;
         Span<Tank> tanks = components.Get<Tank>();
         for (int i = 0; i < tanks.Length; i++)
         {
             if (!fuelClaimedTankIds.Contains(tanks[i].InstanceId))
                 mass += tanks[i].ComputeSubstanceMass(moleStates);
         }
-        return mass;
+        return (mass, dryMass);
+    }
+
+    private static int CountRemainingParts(PartTree tree, HashSet<uint> jettisonedPartIds)
+    {
+        int count = 0;
+        ReadOnlySpan<Part> parts = tree.Parts;
+        for (int i = 0; i < parts.Length; i++)
+        {
+            Part part = parts[i];
+            if (!jettisonedPartIds.Contains(part.InstanceId))
+                count += 1 + part.SubParts.Length;
+        }
+        return count;
     }
 }
