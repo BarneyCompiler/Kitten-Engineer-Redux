@@ -9,10 +9,13 @@ internal static class Patch_StandaloneMenu
 {
     private static void Postfix()
     {
+        if (ModMenuIntegration.IsHandledByModMenu)
+            return;
+
         if (!ImGui.BeginMenu("Kitten Engineer Redux"u8))
             return;
 
-        Program.MainViewport.MenuBarInUse = true;
+        ((IGameViewportLifecycle)Program.MainViewport).SetMenuBarInUse(true);
         MenuContent.DrawToggles();
 
         ImGui.EndMenu();

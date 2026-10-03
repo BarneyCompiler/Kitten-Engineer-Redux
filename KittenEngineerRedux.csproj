@@ -3,7 +3,7 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     </PropertyGroup>
 
     <ItemGroup>
@@ -11,6 +11,7 @@
         <PackageReference Include="Lib.Harmony" Version="2.4.2">
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
+        <PackageReference Include="ModMenu.Attributes" Version="1.0.2" />
         <PackageReference Include="StarMap.API" Version="0.3.6" />
     </ItemGroup>
 
@@ -18,11 +19,6 @@
         <Reference Include="KSA">
             <HintPath>C:\Program Files\Kitten Space Agency\KSA.dll</HintPath>
             <Private>false</Private>
-        </Reference>
-
-        <Reference Include="ModMenu.Attributes">
-          <HintPath>C:\Users\Matthew\Documents\My Games\Kitten Space Agency\mods\KittenEngineerRedux\ModMenu.Attributes.dll</HintPath>
-          <Private>true</Private>
         </Reference>
 
         <Reference Include="BepuUtilities">

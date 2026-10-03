@@ -86,7 +86,7 @@ internal static class SequenceAnalyzer
             {
                 foreach (EngineController engine in _pooledEngines)
                 {
-                    var data = RocketControllerData.ComputeFromCores(engine.Cores.AsSpan(), float3.Zero, ambientPressure);
+                    var data = RocketControllerData.ComputeFromCores(engine.Cores.AsSpan(), ambientPressure, 1f);
                     totalThrust += data.ThrustMax.Length();
                     totalFlowRate += data.MassFlowRateMax;
                 }
@@ -178,9 +178,9 @@ internal static class SequenceAnalyzer
         {
             foreach (RocketCore core in engine.Cores)
             {
-                if (core.ResourceManager == null)
+                if (core is not PlumbedCore { ResourceManager: { } resourceManager })
                     continue;
-                var (current, max) = WalkReachableTanks(core.ResourceManager, fuelClaimedTankIds, moleStates);
+                var (current, max) = WalkReachableTanks(resourceManager, fuelClaimedTankIds, moleStates);
                 totalCurrent += current;
                 totalMax += max;
             }
@@ -193,17 +193,16 @@ internal static class SequenceAnalyzer
     {
         float current = 0f;
         float max = 0f;
-        var nodes = FlowHelpers.SelectFlowNodes(resourceManager);
-        if (nodes == null || nodes.Length == 0)
+        FlowOrder<Tank> order = FlowHelpers.SelectFlowNodes(resourceManager);
+        if (!order.IsValid || order.LevelCount == 0)
             return (0f, 0f);
 
-        Span<CommunityToolkit.HighPerformance.Buffers.MemoryOwner<Tank>> nodeSpan = nodes.Span;
-        for (int i = 0; i < nodeSpan.Length; i++)
+        for (int i = 0; i < order.LevelCount; i++)
         {
-            if (nodeSpan[i] == null || nodeSpan[i].Length == 0)
+            ReadOnlySpan<Tank> tanks = order[i];
+            if (tanks.IsEmpty)
                 continue;
 
-            Span<Tank> tanks = nodeSpan[i].Span;
             for (int j = 0; j < tanks.Length; j++)
             {
                 Tank tank = tanks[j];

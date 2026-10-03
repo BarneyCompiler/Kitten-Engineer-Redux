@@ -25,7 +25,7 @@ internal static class PanelKit
     {
         ImGui.SetNextWindowPos(defaultPos, ImGuiCond.FirstUseEver, null);
         ImGui.SetNextWindowSize(defaultSize, ImGuiCond.FirstUseEver);
-        ImGui.SetNextWindowSizeConstraints(MinWindowSize, MaxWindowSize, null);
+        ImGui.SetNextWindowSizeConstraints(MinWindowSize, MaxWindowSize, (ImGuiSizeCallback?)null);
 
         ImGui.PushStyleColor(ImGuiCol.WindowBg, ToColor(WindowBgColor));
         ImGui.PushStyleColor(ImGuiCol.Border, ToColor(BorderColor));

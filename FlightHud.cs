@@ -17,7 +17,7 @@ internal static class FlightHud
 
     public static bool Visible { get; set; } = true;
 
-    public static void Draw(Vehicle vehicle, Viewport viewport)
+    public static void Draw(Vehicle vehicle, GameViewport viewport)
     {
         if (!Visible)
             return;

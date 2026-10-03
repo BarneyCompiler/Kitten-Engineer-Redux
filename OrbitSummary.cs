@@ -38,7 +38,7 @@ internal static class OrbitSummaryCalculator
         if (isBound && orbit.SemiMajorAxis > 0.0)
             period = 2.0 * Math.PI * Math.Sqrt(Math.Pow(orbit.SemiMajorAxis, 3.0) / orbit.Mu);
 
-        SimTime now = Universe.GetElapsedSimTime();
+        UniverseTime now = Universe.GetElapsedTime();
         double? timeToApoapsis = isBound ? (vehicle.NextApoapsisTime - now).Seconds() : null;
         double timeToPeriapsis = (vehicle.NextPeriapsisTime - now).Seconds();
 

@@ -4,12 +4,11 @@ namespace KittenEngineerRedux.UI;
 
 public static class ModMenuIntegration
 {
-    public static bool IsHandledByModMenu { get; private set; }
+    public static bool IsHandledByModMenu { get; set; }
 
-    [ModMenuEntry("Kitten Engineer Redux")]
+    [ModMenuEntry("Kitten Engineer Redux", nameof(IsHandledByModMenu))]
     public static void DrawMenu()
     {
-        IsHandledByModMenu = true;
         MenuContent.DrawToggles();
     }
 }

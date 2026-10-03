@@ -15,7 +15,7 @@ internal static class EditorPanel
 
     public static bool Visible { get; set; } = true;
 
-    public static void Draw(VehicleEditor editor, Viewport viewport)
+    public static void Draw(VehicleEditor editor, GameViewport viewport)
     {
         if (!Visible)
             return;

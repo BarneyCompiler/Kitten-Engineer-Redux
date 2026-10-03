@@ -6,7 +6,7 @@ namespace KittenEngineerRedux.Editor;
 [HarmonyPatch(typeof(VehicleEditor), nameof(VehicleEditor.OnDrawUi))]
 internal static class Patch_EditorPanel
 {
-    private static void Postfix(VehicleEditor __instance, Viewport inViewport)
+    private static void Postfix(VehicleEditor __instance, GameViewport inViewport)
     {
         EditorPanel.Draw(__instance, inViewport);
     }
