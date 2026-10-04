@@ -13,6 +13,37 @@ internal static class FlightHud
     private const float SidePadding = 16f;
     private const double RadToDeg = 180.0 / System.Math.PI;
 
+    private sealed class FrameData
+    {
+        public Vehicle Vehicle = default!;
+        public OrbitSummary Orbit = default!;
+        public SuicideBurnInfo SuicideBurn = default!;
+        public VehicleBurnAnalysis Burn = default!;
+        public ActualEnginePerformanceInfo Engine = default!;
+        public bool UsedNativeResults;
+        public float MaxAnalysisAltitude;
+        public float MaximumThrust;
+        public float ActualTwr;
+        public float MaximumTwr;
+        public float Mass;
+        public float AccelerationG;
+        public int ActiveSequence;
+    }
+
+    private static readonly FrameData Frame = new();
+
+    private static readonly HudSection[] Sections =
+    {
+        new("live", "LIVE", DrawLiveSection),
+        new("orbit", "ORBIT", DrawOrbitSection),
+        new("suicide", "SUICIDE BURN", DrawSuicideSection),
+        new("stages", "STAGES", DrawStagesSection),
+        new("elements", "ORBIT ELEMENTS", DrawElementsSection),
+        new("planner", "ORBIT PLANNER", DrawPlannerSection),
+        new("surface", "SURFACE", DrawSurfaceSection),
+        new("history", "HISTORY", DrawHistorySection),
+    };
+
     private static readonly string[] HistoryLabels = { "Altitude", "Speed", "TWR", "Thrust", "Accel", "Mass" };
     private static readonly string[] HistoryTitles = { "Altitude", "Surface speed", "Thrust-to-weight ratio", "Thrust", "Acceleration", "Vessel mass" };
     private static readonly string[] HistoryUnits = { "m", "m/s", "", "N", "", "kg" };
@@ -36,48 +67,51 @@ internal static class FlightHud
         if (!Visible)
             return;
 
-        OrbitSummary orbit = OrbitSummaryCalculator.Compute(vehicle);
-        SuicideBurnInfo suicideBurn = SuicideBurnCalculator.Compute(vehicle, orbit);
+        FrameData f = Frame;
+        f.Vehicle = vehicle;
+        f.Orbit = OrbitSummaryCalculator.Compute(vehicle);
+        f.SuicideBurn = SuicideBurnCalculator.Compute(vehicle, f.Orbit);
 
-        float maxAnalysisAltitude = EnvironmentHelpers.GetAtmosphereHeight(vehicle.Parent);
+        f.MaxAnalysisAltitude = EnvironmentHelpers.GetAtmosphereHeight(vehicle.Parent);
         if (!_analysisAltitudeInitialized)
         {
-            _analysisAltitude = Math.Clamp(Math.Max(0f, (float)vehicle.GetBarometricAltitude()), 0f, maxAnalysisAltitude);
+            _analysisAltitude = Math.Clamp(Math.Max(0f, (float)vehicle.GetBarometricAltitude()), 0f, f.MaxAnalysisAltitude);
             _analysisAltitudeInitialized = true;
         }
-        _analysisAltitude = Math.Clamp(_analysisAltitude, 0f, maxAnalysisAltitude);
+        _analysisAltitude = Math.Clamp(_analysisAltitude, 0f, f.MaxAnalysisAltitude);
         float ambientPressure = _useAtmosphere
             ? EnvironmentHelpers.GetAtmosphericPressureAtAltitude(vehicle.Parent, _analysisAltitude)
             : 0f;
         float surfaceGravity = EnvironmentHelpers.ComputeSurfaceGravity(vehicle.Parent, _analysisAltitude);
 
-        VehicleBurnAnalysis burn;
         bool usedNativeResults;
         if (_useNativeStaging)
-            burn = SequenceAnalyzer.AnalyzeNative(vehicle.Parts, surfaceGravity, recomputeIfDirty: false, out usedNativeResults);
+            f.Burn = SequenceAnalyzer.AnalyzeNative(vehicle.Parts, surfaceGravity, recomputeIfDirty: false, out usedNativeResults);
         else
         {
-            burn = SequenceAnalyzer.Analyze(vehicle.Parts, vehicle.TotalMass, ambientPressure, surfaceGravity);
+            f.Burn = SequenceAnalyzer.Analyze(vehicle.Parts, vehicle.TotalMass, ambientPressure, surfaceGravity);
             usedNativeResults = false;
         }
+        f.UsedNativeResults = usedNativeResults;
+
         float livePressure = (float)vehicle.PhysicsEnvironment.AtmosphericPressure;
-        ActualEnginePerformanceInfo actualEnginePerformance = ActiveEngineThrust.ComputeActual(vehicle.Parts);
-        float maximumAvailableThrust = vehicle.ComputeActiveThrust(livePressure);
+        f.Engine = ActiveEngineThrust.ComputeActual(vehicle.Parts);
+        f.MaximumThrust = vehicle.ComputeActiveThrust(livePressure);
         float currentGravity = EnvironmentHelpers.ComputeSurfaceGravity(
             vehicle.Parent, Math.Max(0f, vehicle.GetBarometricAltitude()));
-        float currentMass = vehicle.TotalMass;
-        float actualTwr = currentMass > 0f && currentGravity > 0f
-            ? actualEnginePerformance.TotalThrust / (currentMass * currentGravity)
+        f.Mass = vehicle.TotalMass;
+        f.ActualTwr = f.Mass > 0f && currentGravity > 0f
+            ? f.Engine.TotalThrust / (f.Mass * currentGravity)
             : 0f;
-        float maximumTwr = currentMass > 0f && currentGravity > 0f
-            ? maximumAvailableThrust / (currentMass * currentGravity)
+        f.MaximumTwr = f.Mass > 0f && currentGravity > 0f
+            ? f.MaximumThrust / (f.Mass * currentGravity)
             : 0f;
-        float accelerationG = (float)(vehicle.AccelerationBody.Length() / KSA.Constants.STANDARD_GRAVITY);
-        TelemetryHistory.Record(vehicle, actualEnginePerformance, actualTwr);
+        f.AccelerationG = (float)(vehicle.AccelerationBody.Length() / KSA.Constants.STANDARD_GRAVITY);
+        TelemetryHistory.Record(vehicle, f.Engine, f.ActualTwr);
 
-        int activeSequenceNumber = vehicle.Parts.SequenceList.ActiveSequence;
-        if (activeSequenceNumber <= 0)
-            activeSequenceNumber = vehicle.Parts.SequenceList.GetNextSequenceNumber();
+        f.ActiveSequence = vehicle.Parts.SequenceList.ActiveSequence;
+        if (f.ActiveSequence <= 0)
+            f.ActiveSequence = vehicle.Parts.SequenceList.GetNextSequenceNumber();
 
         float defaultHeight = Math.Max(300f, Math.Min(640f, viewport.Size.Y - 120f));
         float2 defaultPos = viewport.Position + new float2(SidePadding, 60f);
@@ -108,244 +142,74 @@ internal static class FlightHud
             y += 4f;
 
             HudWidgetContext widgetContext = new(
-                orbit, burn.TotalDeltaV, actualTwr, maximumTwr, currentMass,
-                actualEnginePerformance.TotalThrust, accelerationG);
+                f.Orbit, f.Burn.TotalDeltaV, f.ActualTwr, f.MaximumTwr, f.Mass,
+                f.Engine.TotalThrust, f.AccelerationG);
             HudWidgets.Build(widgetContext, out string[] widgetLabels, out string[] widgetValues);
             y = PanelKit.DrawStatTiles(dl, origin, contentWidth, y, widgetLabels, widgetValues);
 
-            if (PanelKit.DrawCollapsibleSection(origin, y, "LIVE"u8, out float nextY))
-            {
-                y = nextY;
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Thrust (act / max)",
-                    $"{PanelKit.FormatThrust(actualEnginePerformance.TotalThrust)} / {PanelKit.FormatThrust(maximumAvailableThrust)}");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "TWR (act / max)",
-                    $"{actualTwr:F2} / {maximumTwr:F2}");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Vessel mass", PanelKit.FormatMass(currentMass));
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Acceleration", $"{accelerationG:F2} g");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Speed (vert / horiz)",
-                    $"{orbit.VerticalVelocity:F1} / {orbit.HorizontalVelocity:F1} m/s");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Mass flow",
-                    $"{actualEnginePerformance.TotalMassFlowRate:F2} kg/s");
-
-                SequenceBurnInfo? activeStage = null;
-                foreach (SequenceBurnInfo stage in burn.Sequences)
-                {
-                    if (stage.SequenceNumber == activeSequenceNumber && stage.EngineCount > 0)
-                    {
-                        activeStage = stage;
-                        break;
-                    }
-                }
-                string activeStageEndurance = activeStage.HasValue && actualEnginePerformance.TotalMassFlowRate > 0f
-                    ? PanelKit.FormatDuration(activeStage.Value.FuelMass / actualEnginePerformance.TotalMassFlowRate)
-                    : "N/A (no active burn)";
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Stage fuel time", activeStageEndurance);
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Fuel time (max thrust)",
-                    PanelKit.FormatDuration(burn.TotalBurnTime));
-                y += 4f;
-            }
-            else
-            {
-                y = nextY;
-            }
-
-            if (PanelKit.DrawCollapsibleSection(origin, y, "ORBIT"u8, out nextY))
-            {
-                y = nextY;
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Time to AP", orbit.TimeToApoapsis.HasValue ? PanelKit.FormatDuration(orbit.TimeToApoapsis.Value) : "N/A (unbound)");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Time to PE", PanelKit.FormatDuration(orbit.TimeToPeriapsis));
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Period", orbit.Period.HasValue ? PanelKit.FormatDuration(orbit.Period.Value) : "N/A (unbound)");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Orbital speed", $"{orbit.OrbitalSpeed:F1} m/s");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Inclination", $"{orbit.Inclination * RadToDeg:F2}\u00b0");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Eccentricity", $"{orbit.Eccentricity:F3}");
-                y += 4f;
-            }
-            else
-            {
-                y = nextY;
-            }
-
-            if (PanelKit.DrawCollapsibleSection(origin, y, "SUICIDE BURN"u8, out nextY))
-            {
-                y = nextY;
-                y = DrawSuicideBurnSection(dl, origin, contentWidth, y, suicideBurn);
-                y += 4f;
-            }
-            else
-            {
-                y = nextY;
-            }
-
-            if (PanelKit.DrawCollapsibleSection(origin, y, "STAGES"u8, out nextY))
-            {
-                y = nextY;
-
-                if (PanelKit.DrawCollapsibleSection(origin, y, "ANALYSIS SETTINGS"u8, out float settingsY))
-                {
-                    y = settingsY;
-                    bool conditionsChanged = false;
-                    y = PanelKit.DrawTwoWayToggle(dl, origin, contentWidth, y,
-                        "Altitude estimate", "KSA simulation", _useNativeStaging,
-                        "##KerHudCustom", "##KerHudNative", out bool clickedNative, out bool clickedCustom);
-                    if (clickedNative) { _useNativeStaging = true; conditionsChanged = true; }
-                    if (clickedCustom) { _useNativeStaging = false; conditionsChanged = true; }
-
-                    if (_useNativeStaging)
-                    {
-                        y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Performance source",
-                            usedNativeResults ? "KSA stage simulation" : "Native cache pending; estimate");
-                    }
-                    else
-                    {
-                        y = PanelKit.DrawTwoWayToggle(dl, origin, contentWidth, y,
-                            "Vacuum", "Atmosphere", _useAtmosphere,
-                            "##KerHudToggleVac", "##KerHudToggleAtmo",
-                            out bool clickedAtmosphere, out bool clickedVacuum);
-                        if (clickedAtmosphere) { _useAtmosphere = true; conditionsChanged = true; }
-                        if (clickedVacuum) { _useAtmosphere = false; conditionsChanged = true; }
-                        if (_useAtmosphere && maxAnalysisAltitude > 0f)
-                        {
-                            y = PanelKit.DrawSliderRow(dl, origin, contentWidth, y,
-                                "Analysis altitude", "##KerHudAnalysisAltitude"u8, ref _analysisAltitude,
-                                0f, maxAnalysisAltitude, "%.0f m", out bool altitudeChanged);
-                            conditionsChanged |= altitudeChanged;
-                            y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Analysis pressure",
-                                PanelKit.FormatPressure(EnvironmentHelpers.GetAtmosphericPressureAtAltitude(vehicle.Parent, _analysisAltitude)));
-                        }
-                        else if (_useAtmosphere)
-                        {
-                            y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Atmosphere", "Not available");
-                        }
-                    }
-
-                    if (conditionsChanged)
-                    {
-                        if (_useNativeStaging)
-                            burn = SequenceAnalyzer.AnalyzeNative(vehicle.Parts, surfaceGravity, recomputeIfDirty: false, out usedNativeResults);
-                        else
-                        {
-                            ambientPressure = _useAtmosphere
-                                ? EnvironmentHelpers.GetAtmosphericPressureAtAltitude(vehicle.Parent, _analysisAltitude)
-                                : 0f;
-                            surfaceGravity = EnvironmentHelpers.ComputeSurfaceGravity(vehicle.Parent, _analysisAltitude);
-                            burn = SequenceAnalyzer.Analyze(vehicle.Parts, vehicle.TotalMass, ambientPressure, surfaceGravity);
-                            usedNativeResults = false;
-                        }
-                    }
-                    y += 4f;
-                }
-                else
-                {
-                    y = settingsY;
-                }
-
-                y = StageListView.Draw(dl, origin, contentWidth, y, burn, _useNativeStaging, activeSequenceNumber);
-                y += 4f;
-            }
-            else
-            {
-                y = nextY;
-            }
-
-            if (PanelKit.DrawCollapsibleSection(origin, y, "ORBIT ELEMENTS"u8, out nextY))
-            {
-                y = nextY;
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Semi-major axis", FormatAltitude(orbit.SemiMajorAxis));
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "LAN", $"{orbit.LongitudeOfAscendingNode * RadToDeg:F2}\u00b0");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Argument of PE", $"{orbit.ArgumentOfPeriapsis * RadToDeg:F2}\u00b0");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Time to AN", orbit.TimeToAscendingNode.HasValue ? PanelKit.FormatDuration(orbit.TimeToAscendingNode.Value) : "N/A");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Time to DN", orbit.TimeToDescendingNode.HasValue ? PanelKit.FormatDuration(orbit.TimeToDescendingNode.Value) : "N/A");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Eccentricity vector", FormatVector(orbit.EccentricityVector));
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Orbital normal", FormatVector(orbit.OrbitalNormal));
-                y += 4f;
-            }
-            else
-            {
-                y = nextY;
-            }
-
-            if (PanelKit.DrawCollapsibleSection(origin, y, "ORBIT PLANNER"u8, out nextY))
-            {
-                y = nextY;
-                y = PanelKit.DrawInputDoubleRow(dl, origin, contentWidth, y, "Target circular altitude",
-                    "##KerTargetOrbitAltitude"u8, ref _targetOrbitAltitude, 1000.0, 10000.0);
-                OrbitTransferEstimate estimate = OrbitPlanner.EstimateCircularTransfer(vehicle, _targetOrbitAltitude);
-                if (estimate.IsValid)
-                {
-                    y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Departure / arrival dV",
-                        $"{estimate.DepartureDeltaV:F0} / {estimate.ArrivalDeltaV:F0} m/s");
-                    y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Total transfer dV",
-                        $"{estimate.TotalDeltaV:F0} m/s");
-                    y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Transfer time",
-                        PanelKit.FormatDuration(estimate.TransferTime));
-                }
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Model", estimate.Status,
-                    warning: !estimate.IsValid);
-                y += 4f;
-            }
-            else
-            {
-                y = nextY;
-            }
-
-            if (PanelKit.DrawCollapsibleSection(origin, y, "SURFACE"u8, out nextY))
-            {
-                y = nextY;
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Latitude", $"{orbit.Latitude:F4}\u00b0");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Longitude", $"{orbit.Longitude:F4}\u00b0");
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Terrain altitude", FormatAltitude(orbit.TerrainAltitude));
-                y = PanelKit.DrawRow(dl, origin, contentWidth, y, "Sea level altitude", FormatAltitude(orbit.SeaLevelAltitude));
-                y += 4f;
-            }
-            else
-            {
-                y = nextY;
-            }
-
-            if (PanelKit.DrawCollapsibleSection(origin, y, "HISTORY"u8, out nextY))
-            {
-                y = nextY;
-                int selectedMetric = Array.IndexOf(HistoryMetrics, _historyMetric);
-                y = PanelKit.DrawChips(dl, origin, contentWidth, y, HistoryLabels, selectedMetric, "##KerHistChip", out int clickedMetric);
-                if (clickedMetric >= 0)
-                {
-                    _historyMetric = HistoryMetrics[clickedMetric];
-                    selectedMetric = clickedMetric;
-                }
-                selectedMetric = Math.Max(0, selectedMetric);
-
-                string graphTitle = HistoryUnits[selectedMetric].Length > 0
-                    ? $"{HistoryTitles[selectedMetric]} ({HistoryUnits[selectedMetric]})"
-                    : HistoryTitles[selectedMetric];
-                ReadOnlySpan<float> history = TelemetryHistory.GetSamples(_historyMetric);
-                y = PanelKit.DrawLineGraph(dl, origin, contentWidth, y, graphTitle, history);
-
-                ImGui.SetCursorScreenPos(new float2(origin.X, y));
-                if (ImGui.Button("Clear history"u8, (float2?)null))
-                    TelemetryHistory.Clear();
-                y += Math.Max(PanelKit.RowHeight, ImGui.GetFrameHeight()) + 4f;
-            }
-            else
-            {
-                y = nextY;
-            }
+            for (int i = 0; i < Sections.Length; i++)
+                y = SectionHost.DrawDocked(Sections[i], dl, origin, contentWidth, y);
 
             PanelKit.EndContent(origin, contentWidth, y);
         }
         PanelKit.EndWindow();
+
+        for (int i = 0; i < Sections.Length; i++)
+            SectionHost.DrawFloating(Sections[i], viewport, i);
     }
 
-    private static float DrawSuicideBurnSection(ImDrawListPtr dl, float2 origin, float width, float y, SuicideBurnInfo info)
+    private static float DrawLiveSection(ImDrawListPtr dl, float2 origin, float width, float y)
     {
-        if (!info.HasSufficientThrust)
+        FrameData f = Frame;
+        y = PanelKit.DrawRow(dl, origin, width, y, "Thrust (act / max)",
+            $"{PanelKit.FormatThrust(f.Engine.TotalThrust)} / {PanelKit.FormatThrust(f.MaximumThrust)}");
+        y = PanelKit.DrawRow(dl, origin, width, y, "TWR (act / max)",
+            $"{f.ActualTwr:F2} / {f.MaximumTwr:F2}");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Vessel mass", PanelKit.FormatMass(f.Mass));
+        y = PanelKit.DrawRow(dl, origin, width, y, "Acceleration", $"{f.AccelerationG:F2} g");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Speed (vert / horiz)",
+            $"{f.Orbit.VerticalVelocity:F1} / {f.Orbit.HorizontalVelocity:F1} m/s");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Mass flow",
+            $"{f.Engine.TotalMassFlowRate:F2} kg/s");
+
+        SequenceBurnInfo? activeStage = null;
+        foreach (SequenceBurnInfo stage in f.Burn.Sequences)
         {
-            return PanelKit.DrawRow(dl, origin, width, y, "Status", "INSUFFICIENT THRUST", warning: true);
+            if (stage.SequenceNumber == f.ActiveSequence && stage.EngineCount > 0)
+            {
+                activeStage = stage;
+                break;
+            }
         }
+        string activeStageEndurance = activeStage.HasValue && f.Engine.TotalMassFlowRate > 0f
+            ? PanelKit.FormatDuration(activeStage.Value.FuelMass / f.Engine.TotalMassFlowRate)
+            : "N/A (no active burn)";
+        y = PanelKit.DrawRow(dl, origin, width, y, "Stage fuel time", activeStageEndurance);
+        y = PanelKit.DrawRow(dl, origin, width, y, "Fuel time (max thrust)",
+            PanelKit.FormatDuration(f.Burn.TotalBurnTime));
+        return y;
+    }
+
+    private static float DrawOrbitSection(ImDrawListPtr dl, float2 origin, float width, float y)
+    {
+        OrbitSummary orbit = Frame.Orbit;
+        y = PanelKit.DrawRow(dl, origin, width, y, "Time to AP", orbit.TimeToApoapsis.HasValue ? PanelKit.FormatDuration(orbit.TimeToApoapsis.Value) : "N/A (unbound)");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Time to PE", PanelKit.FormatDuration(orbit.TimeToPeriapsis));
+        y = PanelKit.DrawRow(dl, origin, width, y, "Period", orbit.Period.HasValue ? PanelKit.FormatDuration(orbit.Period.Value) : "N/A (unbound)");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Orbital speed", $"{orbit.OrbitalSpeed:F1} m/s");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Inclination", $"{orbit.Inclination * RadToDeg:F2}\u00b0");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Eccentricity", $"{orbit.Eccentricity:F3}");
+        return y;
+    }
+
+    private static float DrawSuicideSection(ImDrawListPtr dl, float2 origin, float width, float y)
+    {
+        SuicideBurnInfo info = Frame.SuicideBurn;
+        if (!info.HasSufficientThrust)
+            return PanelKit.DrawRow(dl, origin, width, y, "Status", "INSUFFICIENT THRUST", warning: true);
 
         if (!info.IsDescending)
-        {
             return PanelKit.DrawRow(dl, origin, width, y, "Status", "NOT DESCENDING");
-        }
 
         y = PanelKit.DrawRow(dl, origin, width, y, "Burn altitude", FormatAltitude(info.BurnAltitude));
         y = PanelKit.DrawRow(dl, origin, width, y, "Burn duration", $"{info.BurnDuration:F1} s");
@@ -355,6 +219,125 @@ internal static class FlightHud
         else
             y = PanelKit.DrawRow(dl, origin, width, y, "Time to burn", info.TimeToBurn.HasValue ? PanelKit.FormatDuration(info.TimeToBurn.Value) : "N/A");
 
+        return y;
+    }
+
+    private static float DrawStagesSection(ImDrawListPtr dl, float2 origin, float width, float y)
+    {
+        FrameData f = Frame;
+        if (PanelKit.DrawCollapsibleSection(origin, y, "ANALYSIS SETTINGS"u8, out float settingsY))
+        {
+            y = settingsY;
+            y = PanelKit.DrawTwoWayToggle(dl, origin, width, y,
+                "Altitude estimate", "KSA simulation", _useNativeStaging,
+                "##KerHudCustom", "##KerHudNative", out bool clickedNative, out bool clickedCustom);
+            if (clickedNative)
+                _useNativeStaging = true;
+            if (clickedCustom)
+                _useNativeStaging = false;
+
+            if (_useNativeStaging)
+            {
+                y = PanelKit.DrawRow(dl, origin, width, y, "Performance source",
+                    f.UsedNativeResults ? "KSA stage simulation" : "Native cache pending; estimate");
+            }
+            else
+            {
+                y = PanelKit.DrawTwoWayToggle(dl, origin, width, y,
+                    "Vacuum", "Atmosphere", _useAtmosphere,
+                    "##KerHudToggleVac", "##KerHudToggleAtmo",
+                    out bool clickedAtmosphere, out bool clickedVacuum);
+                if (clickedAtmosphere)
+                    _useAtmosphere = true;
+                if (clickedVacuum)
+                    _useAtmosphere = false;
+                if (_useAtmosphere && f.MaxAnalysisAltitude > 0f)
+                {
+                    y = PanelKit.DrawSliderRow(dl, origin, width, y,
+                        "Analysis altitude", "##KerHudAnalysisAltitude"u8, ref _analysisAltitude,
+                        0f, f.MaxAnalysisAltitude, "%.0f m", out _);
+                    y = PanelKit.DrawRow(dl, origin, width, y, "Analysis pressure",
+                        PanelKit.FormatPressure(EnvironmentHelpers.GetAtmosphericPressureAtAltitude(f.Vehicle.Parent, _analysisAltitude)));
+                }
+                else if (_useAtmosphere)
+                {
+                    y = PanelKit.DrawRow(dl, origin, width, y, "Atmosphere", "Not available");
+                }
+            }
+            y += 4f;
+        }
+        else
+        {
+            y = settingsY;
+        }
+
+        y = StageListView.Draw(dl, origin, width, y, f.Burn, _useNativeStaging, f.ActiveSequence);
+        return y;
+    }
+
+    private static float DrawElementsSection(ImDrawListPtr dl, float2 origin, float width, float y)
+    {
+        OrbitSummary orbit = Frame.Orbit;
+        y = PanelKit.DrawRow(dl, origin, width, y, "Semi-major axis", FormatAltitude(orbit.SemiMajorAxis));
+        y = PanelKit.DrawRow(dl, origin, width, y, "LAN", $"{orbit.LongitudeOfAscendingNode * RadToDeg:F2}\u00b0");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Argument of PE", $"{orbit.ArgumentOfPeriapsis * RadToDeg:F2}\u00b0");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Time to AN", orbit.TimeToAscendingNode.HasValue ? PanelKit.FormatDuration(orbit.TimeToAscendingNode.Value) : "N/A");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Time to DN", orbit.TimeToDescendingNode.HasValue ? PanelKit.FormatDuration(orbit.TimeToDescendingNode.Value) : "N/A");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Eccentricity vector", FormatVector(orbit.EccentricityVector));
+        y = PanelKit.DrawRow(dl, origin, width, y, "Orbital normal", FormatVector(orbit.OrbitalNormal));
+        return y;
+    }
+
+    private static float DrawPlannerSection(ImDrawListPtr dl, float2 origin, float width, float y)
+    {
+        y = PanelKit.DrawInputDoubleRow(dl, origin, width, y, "Target circular altitude",
+            "##KerTargetOrbitAltitude"u8, ref _targetOrbitAltitude, 1000.0, 10000.0);
+        OrbitTransferEstimate estimate = OrbitPlanner.EstimateCircularTransfer(Frame.Vehicle, _targetOrbitAltitude);
+        if (estimate.IsValid)
+        {
+            y = PanelKit.DrawRow(dl, origin, width, y, "Departure / arrival dV",
+                $"{estimate.DepartureDeltaV:F0} / {estimate.ArrivalDeltaV:F0} m/s");
+            y = PanelKit.DrawRow(dl, origin, width, y, "Total transfer dV",
+                $"{estimate.TotalDeltaV:F0} m/s");
+            y = PanelKit.DrawRow(dl, origin, width, y, "Transfer time",
+                PanelKit.FormatDuration(estimate.TransferTime));
+        }
+        y = PanelKit.DrawRow(dl, origin, width, y, "Model", estimate.Status,
+            warning: !estimate.IsValid);
+        return y;
+    }
+
+    private static float DrawSurfaceSection(ImDrawListPtr dl, float2 origin, float width, float y)
+    {
+        OrbitSummary orbit = Frame.Orbit;
+        y = PanelKit.DrawRow(dl, origin, width, y, "Latitude", $"{orbit.Latitude:F4}\u00b0");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Longitude", $"{orbit.Longitude:F4}\u00b0");
+        y = PanelKit.DrawRow(dl, origin, width, y, "Terrain altitude", FormatAltitude(orbit.TerrainAltitude));
+        y = PanelKit.DrawRow(dl, origin, width, y, "Sea level altitude", FormatAltitude(orbit.SeaLevelAltitude));
+        return y;
+    }
+
+    private static float DrawHistorySection(ImDrawListPtr dl, float2 origin, float width, float y)
+    {
+        int selectedMetric = Array.IndexOf(HistoryMetrics, _historyMetric);
+        y = PanelKit.DrawChips(dl, origin, width, y, HistoryLabels, selectedMetric, "##KerHistChip", out int clickedMetric);
+        if (clickedMetric >= 0)
+        {
+            _historyMetric = HistoryMetrics[clickedMetric];
+            selectedMetric = clickedMetric;
+        }
+        selectedMetric = Math.Max(0, selectedMetric);
+
+        string graphTitle = HistoryUnits[selectedMetric].Length > 0
+            ? $"{HistoryTitles[selectedMetric]} ({HistoryUnits[selectedMetric]})"
+            : HistoryTitles[selectedMetric];
+        ReadOnlySpan<float> history = TelemetryHistory.GetSamples(_historyMetric);
+        y = PanelKit.DrawLineGraph(dl, origin, width, y, graphTitle, history);
+
+        ImGui.SetCursorScreenPos(new float2(origin.X, y));
+        if (ImGui.Button("Clear history"u8, (float2?)null))
+            TelemetryHistory.Clear();
+        y += Math.Max(PanelKit.RowHeight, ImGui.GetFrameHeight()) + 4f;
         return y;
     }
 
