@@ -1,4 +1,4 @@
-﻿﻿using KSA;
+﻿using KSA;
 
 namespace KittenEngineerRedux.Analysis;
 
@@ -10,11 +10,8 @@ internal static class MassAnalyzer
     {
         float dry = parts.ComputeInertMassPropertiesAsmb().Props.Mass;
         float prop = parts.ComputePropellantMassPropertiesAsmb().Props.Mass;
-                int partCount = 0;
-                ReadOnlySpan<Part> craftParts = parts.Parts;
-                for (int i = 0; i < craftParts.Length; i++)
-                    partCount += 1 + craftParts[i].SubParts.Length;
+        int partCount = parts.Parts.Length - 1;
 
-                return new VehicleMassSummary(dry, prop, dry + prop, partCount);
+        return new VehicleMassSummary(dry, prop, dry + prop, partCount);
     }
 }
