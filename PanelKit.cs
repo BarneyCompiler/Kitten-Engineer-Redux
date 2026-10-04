@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using Brutal.ImGuiApi;
 using Brutal.Numerics;
 
@@ -11,15 +11,17 @@ internal static class PanelKit
     public static readonly float2 MinWindowSize = new(220f, 140f);
     public static readonly float2 MaxWindowSize = new(700f, 1200f);
 
-    private static readonly float4 WindowBgColor = new(0.07f, 0.08f, 0.10f, 0.96f);
-    private static readonly float4 BorderColor = new(0.22f, 0.24f, 0.28f, 1f);
-    private static readonly float4 HeaderColor = new(0.55f, 0.78f, 0.95f, 1f);
-    private static readonly float4 LabelColor = new(0.72f, 0.74f, 0.78f, 1f);
-    private static readonly float4 ValueColor = new(0.95f, 0.96f, 0.98f, 1f);
-    private static readonly float4 AccentColor = new(0.30f, 0.62f, 0.90f, 1f);
-    private static readonly float4 ToggleOffColor = new(0.16f, 0.17f, 0.20f, 1f);
-    private static readonly float4 WarningColor = new(0.92f, 0.45f, 0.30f, 1f);
-    private static readonly float4 GoodColor = new(0.45f, 0.85f, 0.55f, 1f);
+    public static float4 WindowBgColor = new(0.07f, 0.08f, 0.10f, 0.96f);
+    public static float4 BorderColor = new(0.22f, 0.24f, 0.28f, 1f);
+    public static float4 HeaderColor = new(0.55f, 0.78f, 0.95f, 1f);
+    public static float4 LabelColor = new(0.72f, 0.74f, 0.78f, 1f);
+    public static float4 ValueColor = new(0.95f, 0.96f, 0.98f, 1f);
+    public static float4 AccentColor = new(0.30f, 0.62f, 0.90f, 1f);
+    public static float4 ToggleOffColor = new(0.16f, 0.17f, 0.20f, 1f);
+    public static float4 WarningColor = new(0.92f, 0.45f, 0.30f, 1f);
+    public static float4 GoodColor = new(0.45f, 0.85f, 0.55f, 1f);
+    public static float CornerRadius = 4f;
+    public static float TextScale = 1f;
 
     public static bool BeginWindow(ReadOnlySpan<byte> title, float2 defaultPos, float2 defaultSize)
     {
@@ -27,19 +29,25 @@ internal static class PanelKit
         ImGui.SetNextWindowSize(defaultSize, ImGuiCond.FirstUseEver);
         ImGui.SetNextWindowSizeConstraints(MinWindowSize, MaxWindowSize, (ImGuiSizeCallback?)null);
 
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, CornerRadius);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, CornerRadius);
         ImGui.PushStyleColor(ImGuiCol.WindowBg, ToColor(WindowBgColor));
         ImGui.PushStyleColor(ImGuiCol.Border, ToColor(BorderColor));
         ImGui.PushStyleColor(ImGuiCol.TitleBg, ToColor(WindowBgColor));
         ImGui.PushStyleColor(ImGuiCol.TitleBgActive, ToColor(WindowBgColor));
         ImGui.PushStyleColor(ImGuiCol.TitleBgCollapsed, ToColor(WindowBgColor));
 
-        return ImGui.Begin(title, ImGuiWindowFlags.None);
+        bool open = ImGui.Begin(title, ImGuiWindowFlags.None);
+        ImGui.PushFont(ImGui.GetFont(), ImGui.GetFontSize() * TextScale);
+        return open;
     }
 
     public static void EndWindow()
     {
+        ImGui.PopFont();
         ImGui.End();
         ImGui.PopStyleColor(5);
+        ImGui.PopStyleVar(2);
     }
 
     public static void DrawAccentStrip(ImDrawListPtr dl, float2 contentOrigin, float windowHeight)
@@ -62,7 +70,8 @@ internal static class PanelKit
         return lineY + 10f;
     }
 
-    public static bool DrawCollapsibleSection(float2 origin, float y, ReadOnlySpan<byte> label, out float nextY)
+    public static bool DrawCollapsibleSection(
+        float2 origin, float y, ReadOnlySpan<byte> label, out float nextY, bool defaultOpen = true)
     {
         ImGui.SetCursorScreenPos(new float2(origin.X, y));
 
@@ -71,7 +80,8 @@ internal static class PanelKit
         ImGui.PushStyleColor(ImGuiCol.HeaderActive, ToColor(AccentColor));
         ImGui.PushStyleColor(ImGuiCol.Text, ToColor(HeaderColor));
 
-        bool open = ImGui.CollapsingHeader(label, ImGuiTreeNodeFlags.DefaultOpen);
+        bool open = ImGui.CollapsingHeader(label,
+            defaultOpen ? ImGuiTreeNodeFlags.DefaultOpen : ImGuiTreeNodeFlags.None);
 
         ImGui.PopStyleColor(4);
 
@@ -124,6 +134,22 @@ internal static class PanelKit
         return y + rowHeight;
     }
 
+    public static float DrawInputDoubleRow(
+        ImDrawListPtr dl, float2 origin, float width, float y, string label, ReadOnlySpan<byte> id,
+        ref double value, double step, double fastStep)
+    {
+        float rowHeight = Math.Max(RowHeight, ImGui.GetFrameHeight());
+        float lineHeight = ImGui.GetTextLineHeight();
+        float inputWidth = Math.Clamp(width * 0.48f, 110f, 170f);
+        float2 labelPos = new float2(origin.X, y + (rowHeight - lineHeight) * 0.5f);
+        dl.AddText(in labelPos, ToColor(LabelColor), label);
+        float inputHeight = ImGui.GetFrameHeight();
+        ImGui.SetCursorScreenPos(new float2(origin.X + width - inputWidth, y + (rowHeight - inputHeight) * 0.5f));
+        ImGui.SetNextItemWidth(inputWidth);
+        ImGui.InputDouble(id, ref value, step, fastStep, default(ImString), ImGuiInputTextFlags.CharsDecimal);
+        return y + rowHeight;
+    }
+
     public static float DrawTotalRow(ImDrawListPtr dl, float2 origin, float width, float y, string label, string value)
     {
         float lineY = y - 4f;
@@ -160,7 +186,7 @@ internal static class PanelKit
 
         float2 max = pos + new float2(width, height);
         float4 fill = active ? AccentColor : ToggleOffColor;
-        dl.AddRectFilled(in pos, in max, ToColor(fill), 4f);
+        dl.AddRectFilled(in pos, in max, ToColor(fill), CornerRadius);
 
         float2 textSize = ImGui.CalcTextSize(label);
         float2 textPos = pos + new float2((width - textSize.X) / 2f, (height - textSize.Y) / 2f);
@@ -185,6 +211,33 @@ internal static class PanelKit
         if (newtons >= 1_000_000f)
             return $"{newtons / 1_000_000f:F2} MN";
         return newtons >= 1000f ? $"{newtons / 1000f:F1} kN" : $"{newtons:F0} N";
+    }
+
+    public static void DrawAppearanceSettings()
+    {
+        ImGui.Text("HUD appearance"u8);
+        ImGui.ColorEdit4("Background"u8, ref WindowBgColor);
+        ImGui.ColorEdit4("Accent"u8, ref AccentColor);
+        ImGui.ColorEdit4("Border"u8, ref BorderColor);
+        ImGui.ColorEdit4("Header text"u8, ref HeaderColor);
+        ImGui.ColorEdit4("Label text"u8, ref LabelColor);
+        ImGui.ColorEdit4("Value text"u8, ref ValueColor);
+        ImGui.SliderFloat("Rounded corners"u8, ref CornerRadius, 0f, 12f, "%.0f px");
+        ImGui.SliderFloat("Text scale"u8, ref TextScale, 0.75f, 1.5f, "%.2f x");
+        if (ImGui.Button("Reset appearance"u8, (float2?)null))
+        {
+            WindowBgColor = new float4(0.07f, 0.08f, 0.10f, 0.96f);
+            BorderColor = new float4(0.22f, 0.24f, 0.28f, 1f);
+            HeaderColor = new float4(0.55f, 0.78f, 0.95f, 1f);
+            LabelColor = new float4(0.72f, 0.74f, 0.78f, 1f);
+            ValueColor = new float4(0.95f, 0.96f, 0.98f, 1f);
+            AccentColor = new float4(0.30f, 0.62f, 0.90f, 1f);
+            ToggleOffColor = new float4(0.16f, 0.17f, 0.20f, 1f);
+            WarningColor = new float4(0.92f, 0.45f, 0.30f, 1f);
+            GoodColor = new float4(0.45f, 0.85f, 0.55f, 1f);
+            CornerRadius = 4f;
+            TextScale = 1f;
+        }
     }
 
     public static string FormatDuration(double seconds)

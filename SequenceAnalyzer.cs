@@ -1,5 +1,6 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
+using System.Text;
 using Brutal.Numerics;
 using KSA;
 
@@ -28,6 +29,8 @@ internal record struct SequenceBurnInfo
     public int PartCount;
     public float JettisonedMass;
     public int EngineCount;
+    public bool HasFeedWarning;
+    public string FeedSummary;
 }
 
 internal record struct VehicleBurnAnalysis
@@ -161,6 +164,154 @@ internal static class SequenceAnalyzer
         }
 
         return result;
+    }
+
+    public static VehicleBurnAnalysis AnalyzeNative(
+        PartTree parts, float surfaceGravity, bool recomputeIfDirty, out bool usedNativeResults)
+    {
+        SequencePerformanceList performanceList = parts.PerformanceSequences;
+        if (recomputeIfDirty)
+            performanceList.RecomputeIfDirty();
+
+        ReadOnlySpan<Sequence> sequences = parts.SequenceList.Sequences;
+        ReadOnlySpan<SequencePerformance> performance = performanceList.PerformanceSequences;
+        if (performanceList.IsDirty || performance.Length != sequences.Length)
+        {
+            usedNativeResults = false;
+            VehicleMassSummary mass = MassAnalyzer.Analyze(parts);
+            return Analyze(parts, mass.WetMass, 0f, surfaceGravity);
+        }
+
+        _pooledSequences.Clear();
+        var result = new VehicleBurnAnalysis
+        {
+            Sequences = _pooledSequences,
+            TotalDeltaV = 0f,
+            TotalBurnTime = 0f
+        };
+
+        usedNativeResults = true;
+        for (int i = 0; i < sequences.Length; i++)
+        {
+            Sequence sequence = sequences[i];
+            SequencePerformance native = performance[i];
+            List<SequencePhaseInfo>? phases = native.Phases;
+            float burnTime = 0f;
+            if (phases != null)
+            {
+                foreach (SequencePhaseInfo phase in phases)
+                    burnTime += phase.Duration;
+            }
+            if (burnTime <= 0f && native.MassFlowRate > 0f)
+                burnTime = native.BurnedFuelMass / native.MassFlowRate;
+
+            int engineCount = 0;
+            HashSet<Part>? attachedParts = native.AttachedParts;
+            if (attachedParts != null)
+            {
+                foreach (Part part in attachedParts)
+                {
+                    Span<EngineController> engines = part.Modules.Get<EngineController>();
+                    for (int engineIndex = 0; engineIndex < engines.Length; engineIndex++)
+                    {
+                        if (engines[engineIndex].Sequence == sequence.Number)
+                            engineCount++;
+                    }
+                }
+            }
+            if (phases != null)
+            {
+                foreach (SequencePhaseInfo phase in phases)
+                    engineCount = Math.Max(engineCount, phase.ActiveEngineCount);
+            }
+
+            string feedSummary = BuildFeedSummary(native.Propellants);
+            bool feedWarning = engineCount > 0 &&
+                (native.DeltaV <= 0f || native.BurnedFuelMass <= 0f || native.Propellants == null || native.Propellants.Count == 0);
+            if (feedWarning)
+                feedSummary = "No usable propellant burn; check tanks, mix, and flow links";
+
+            float endMass = Math.Max(0f, native.WetMass - native.BurnedFuelMass);
+            float initialTwr = native.WetMass > 0f && surfaceGravity > 0f
+                ? native.Thrust / (native.WetMass * surfaceGravity)
+                : native.Twr;
+            float maxTwr = initialTwr;
+            if (phases != null && surfaceGravity > 0f)
+            {
+                float phaseMass = native.WetMass;
+                foreach (SequencePhaseInfo phase in phases)
+                {
+                    if (phaseMass > 0f)
+                        maxTwr = Math.Max(maxTwr, phase.Thrust / (phaseMass * surfaceGravity));
+                    phaseMass = Math.Max(1f, phaseMass - phase.MassFlowRate * phase.Duration);
+                    maxTwr = Math.Max(maxTwr, phase.Thrust / (phaseMass * surfaceGravity));
+                }
+            }
+            result.Sequences.Add(new SequenceBurnInfo
+            {
+                SequenceNumber = sequence.Number,
+                IsActivated = sequence.Activated,
+                DeltaV = native.DeltaV,
+                CumulativeDeltaV = result.TotalDeltaV + native.DeltaV,
+                BurnTime = burnTime,
+                Thrust = native.Thrust,
+                ExhaustVelocity = (float)(native.Isp * KSA.Constants.STANDARD_GRAVITY),
+                Isp = native.Isp,
+                StartMass = native.WetMass,
+                EndMass = endMass,
+                FuelMass = native.FuelMass,
+                MaxFuelMass = native.FuelMass,
+                FuelFraction = native.FuelMass > 0f ? native.BurnedFuelMass / native.FuelMass : 0f,
+                MassFlowRate = native.MassFlowRate,
+                InitialTwr = initialTwr,
+                MaxTwr = maxTwr,
+                WetMass = native.WetMass,
+                DryMass = native.InertMass,
+                PartCount = CountAttachedParts(attachedParts),
+                JettisonedMass = 0f,
+                EngineCount = engineCount,
+                HasFeedWarning = feedWarning,
+                FeedSummary = feedSummary
+            });
+            result.TotalDeltaV += native.DeltaV;
+            result.TotalBurnTime += burnTime;
+        }
+        return result;
+    }
+
+    private static string BuildFeedSummary(List<SequencePropellantInfo>? propellants)
+    {
+        if (propellants == null || propellants.Count == 0)
+            return "No propellant feed sources reported";
+
+        var summary = new StringBuilder();
+        int shown = Math.Min(3, propellants.Count);
+        for (int i = 0; i < shown; i++)
+        {
+            if (i > 0)
+                summary.Append(", ");
+            SequencePropellantInfo propellant = propellants[i];
+            summary.Append(propellant.ReactantName);
+            summary.Append(" @ ");
+            summary.Append(propellant.TankPart.DisplayName);
+            summary.Append(" (");
+            summary.Append(propellant.ConsumedMass.ToString("F1"));
+            summary.Append(" kg)");
+        }
+        if (propellants.Count > shown)
+            summary.Append($", +{propellants.Count - shown} more");
+        return summary.ToString();
+    }
+
+    private static int CountAttachedParts(HashSet<Part>? attachedParts)
+    {
+        if (attachedParts == null)
+            return 0;
+
+        int count = 0;
+        foreach (Part part in attachedParts)
+            count += 1 + part.SubParts.Length;
+        return count;
     }
 
     private static void CollectEngines(Sequence sequence, HashSet<uint> jettisonedPartIds, bool sequenceActivated)

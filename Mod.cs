@@ -1,4 +1,4 @@
-﻿// Kitten Engineer Redux v0.5.1
+﻿// Kitten Engineer Redux 
 // Made by BarneyTheGod
 
 // This mod uses a few snippets from other KSA mods as helper methods for this Mod.
