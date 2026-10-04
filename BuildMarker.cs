@@ -2,5 +2,5 @@
 
 internal static class BuildMarker
 {
-    public const string Stamp = "v0.5.5";
+    public const string Stamp = "v0.5.6";
 }

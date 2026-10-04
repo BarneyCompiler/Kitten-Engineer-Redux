@@ -1,4 +1,4 @@
-﻿﻿using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using Brutal.Numerics;
@@ -308,10 +308,7 @@ internal static class SequenceAnalyzer
         if (attachedParts == null)
             return 0;
 
-        int count = 0;
-        foreach (Part part in attachedParts)
-            count += 1 + part.SubParts.Length;
-        return count;
+        return attachedParts.Count;
     }
 
     private static void CollectEngines(Sequence sequence, HashSet<uint> jettisonedPartIds, bool sequenceActivated)
@@ -457,9 +454,8 @@ internal static class SequenceAnalyzer
         ReadOnlySpan<Part> parts = tree.Parts;
         for (int i = 0; i < parts.Length; i++)
         {
-            Part part = parts[i];
-            if (!jettisonedPartIds.Contains(part.InstanceId))
-                count += 1 + part.SubParts.Length;
+            if (!jettisonedPartIds.Contains(parts[i].InstanceId))
+                count++;
         }
         return count;
     }
