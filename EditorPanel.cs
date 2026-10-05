@@ -24,6 +24,8 @@ internal static class EditorPanel
 
     public static void Draw(VehicleEditor editor, GameViewport viewport)
     {
+        SettingsStore.Tick();
+
         if (!Visible)
             return;
 

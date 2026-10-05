@@ -16,6 +16,7 @@ internal sealed class HudSection
         PoppedTitle = $"{title} (separate window)";
         Draw = draw;
         WindowTitle = Encoding.UTF8.GetBytes($"{title}###KerSection_{id}");
+        SectionRegistry.Register(this);
     }
 
     public string Id { get; }
@@ -25,6 +26,17 @@ internal sealed class HudSection
     public byte[] WindowTitle { get; }
     public bool Open { get; set; }
     public bool Popped { get; set; }
+}
+
+internal static class SectionRegistry
+{
+    public static readonly List<HudSection> All = new();
+
+    public static void Register(HudSection section)
+    {
+        All.Add(section);
+        SettingsStore.ApplySection(section);
+    }
 }
 
 internal static class SectionHost

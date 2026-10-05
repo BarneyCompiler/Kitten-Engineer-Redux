@@ -1,7 +1,11 @@
 using System;
+using System.Globalization;
+using System.IO;
+using System.Text;
 using Brutal.Numerics;
 using KSA;
 using KittenEngineerRedux.Analysis;
+using KittenEngineerRedux.UI;
 
 namespace KittenEngineerRedux.Flight;
 
@@ -17,8 +21,8 @@ internal enum TelemetryMetric
 
 internal static class TelemetryHistory
 {
-    private const int Capacity = 180;
-    private const double SampleInterval = 0.25;
+    public const int Capacity = 720;
+    public const double SampleInterval = 0.25;
 
     private static readonly float[][] _samples =
     {
@@ -35,6 +39,8 @@ internal static class TelemetryHistory
     private static string? _vehicleId;
 
     public static int Count => _count;
+
+    public static string? LastExportPath { get; private set; }
 
     public static void Record(Vehicle vehicle, ActualEnginePerformanceInfo engines, float actualTwr)
     {
@@ -99,6 +105,50 @@ internal static class TelemetryHistory
             max += padding;
         }
         return (min, max);
+    }
+
+    public static string ExportCsv()
+    {
+        if (_count == 0)
+            return "No samples to export yet";
+
+        try
+        {
+            Directory.CreateDirectory(SettingsStore.ExportDirectory);
+            string vehicleName = SanitizeFileName(_vehicleId ?? "vehicle");
+            string fileName = $"telemetry_{vehicleName}_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            string path = Path.Combine(SettingsStore.ExportDirectory, fileName);
+
+            var builder = new StringBuilder();
+            builder.AppendLine("time_s,altitude_m,surface_speed_mps,twr,thrust_kn,acceleration_g,mass_kg");
+            for (int i = 0; i < _count; i++)
+            {
+                double time = -(_count - 1 - i) * SampleInterval;
+                builder.Append(time.ToString("F2", CultureInfo.InvariantCulture));
+                for (int metric = 0; metric < _samples.Length; metric++)
+                {
+                    builder.Append(',');
+                    builder.Append(_samples[metric][i].ToString("G7", CultureInfo.InvariantCulture));
+                }
+                builder.AppendLine();
+            }
+
+            File.WriteAllText(path, builder.ToString());
+            LastExportPath = path;
+            return $"Exported {_count} samples to {fileName}";
+        }
+        catch (Exception ex)
+        {
+            return $"Export failed: {ex.Message}";
+        }
+    }
+
+    private static string SanitizeFileName(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        foreach (char c in value)
+            builder.Append(char.IsLetterOrDigit(c) ? c : '_');
+        return builder.ToString();
     }
 
     public static void Clear()

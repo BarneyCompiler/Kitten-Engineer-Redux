@@ -142,6 +142,43 @@ internal static class PanelKit
         return y + height;
     }
 
+    public static float DrawGauge(ImDrawListPtr dl, float2 origin, float width, float y,
+        string label, float fraction, string valueText, bool warning)
+    {
+        float lineHeight = ImGui.GetTextLineHeight();
+        float clamped = Math.Clamp(float.IsNaN(fraction) ? 0f : fraction, 0f, 1f);
+
+        float2 labelPos = new float2(origin.X, y + 2f);
+        dl.AddText(in labelPos, ToColor(LabelColor), label);
+        float2 valueSize = ImGui.CalcTextSize(valueText);
+        float2 valuePos = new float2(Math.Max(origin.X, origin.X + width - valueSize.X), y + 2f);
+        dl.AddText(in valuePos, ToColor(warning ? WarningColor : ValueColor), valueText);
+
+        float barTop = y + 2f + lineHeight + 3f;
+        float barHeight = 8f;
+        float2 trackMin = new float2(origin.X, barTop);
+        float2 trackMax = new float2(origin.X + width, barTop + barHeight);
+        dl.AddRectFilled(in trackMin, in trackMax, ToColor(GraphBgColor), CornerRadius);
+        if (clamped > 0.002f)
+        {
+            float2 fillMax = new float2(origin.X + width * clamped, barTop + barHeight);
+            dl.AddRectFilled(in trackMin, in fillMax, ToColor(warning ? WarningColor : GoodColor), CornerRadius);
+        }
+        return barTop + barHeight + 8f;
+    }
+
+    public static bool DrawMiniButton(ImDrawListPtr dl, string label, string id, float2 pos, float width, float height, bool active = false)
+    {
+        ImGui.SetCursorScreenPos(pos);
+        bool clicked = ImGui.InvisibleButton(id, new float2(width, height));
+        float2 max = new float2(pos.X + width, pos.Y + height);
+        dl.AddRectFilled(in pos, in max, ToColor(active ? AccentColor : ToggleOffColor), CornerRadius);
+        float2 textSize = ImGui.CalcTextSize(label);
+        float2 textPos = new float2(pos.X + (width - textSize.X) * 0.5f, pos.Y + (height - textSize.Y) * 0.5f);
+        dl.AddText(in textPos, ToColor(ValueColor), label);
+        return clicked;
+    }
+
     public static float DrawTableRow(ImDrawListPtr dl, float2 origin, float width, float y,
         ReadOnlySpan<string> cells, float[] columnFractions, float4 textColor)
     {
@@ -170,7 +207,7 @@ internal static class PanelKit
     }
 
     public static float DrawStatTiles(ImDrawListPtr dl, float2 origin, float width, float y,
-        ReadOnlySpan<string> labels, ReadOnlySpan<string> values)
+        ReadOnlySpan<string> labels, ReadOnlySpan<string> values, ReadOnlySpan<bool> warnings = default)
     {
         const float gap = 6f;
         int count = Math.Min(labels.Length, values.Length);
@@ -187,11 +224,23 @@ internal static class PanelKit
 
         for (int i = 0; i < count; i++)
         {
+            bool warning = i < warnings.Length && warnings[i];
             int col = i % perRow;
             int row = i / perRow;
             float2 tileMin = new float2(origin.X + col * (tileWidth + gap), y + row * (tileHeight + gap));
             float2 tileMax = tileMin + new float2(tileWidth, tileHeight);
             dl.AddRectFilled(in tileMin, in tileMax, ToColor(ToggleOffColor), CornerRadius);
+
+            if (warning)
+            {
+                ImColor8 warnColor = ToColor(WarningColor);
+                float2 topRight = new float2(tileMax.X, tileMin.Y);
+                float2 bottomLeft = new float2(tileMin.X, tileMax.Y);
+                dl.AddLine(in tileMin, in topRight, warnColor);
+                dl.AddLine(in topRight, in tileMax, warnColor);
+                dl.AddLine(in tileMax, in bottomLeft, warnColor);
+                dl.AddLine(in bottomLeft, in tileMin, warnColor);
+            }
 
             float2 labelPos = tileMin + new float2(8f, 5f);
             dl.AddText(in labelPos, ToColor(LabelColor), labels[i]);
@@ -203,7 +252,7 @@ internal static class PanelKit
                 ImGui.PopFont();
 
             float2 valuePos = tileMin + new float2(8f, 5f + lineHeight + 3f);
-            dl.AddText(in valuePos, ToColor(ValueColor), values[i]);
+            dl.AddText(in valuePos, ToColor(warning ? WarningColor : ValueColor), values[i]);
 
             if (fits)
                 ImGui.PopFont();
@@ -241,170 +290,6 @@ internal static class PanelKit
             x += chipWidth + 4f;
         }
         return rowY + chipHeight + 8f;
-    }
-
-    public static float DrawLineGraph(ImDrawListPtr dl, float2 origin, float width, float y,
-        string title, ReadOnlySpan<float> samples)
-    {
-        float side = Math.Clamp(width, 180f, 560f);
-        float x0 = origin.X + Math.Max(0f, (width - side) * 0.5f);
-        float lineHeight = ImGui.GetTextLineHeight();
-
-        float2 boxMin = new float2(x0, y);
-        float2 boxMax = new float2(x0 + side, y + side);
-        dl.AddRectFilled(in boxMin, in boxMax, ToColor(GraphBgColor), CornerRadius);
-
-        float2 titlePos = new float2(x0 + 8f, y + 6f);
-        dl.AddText(in titlePos, ToColor(HeaderColor), title);
-
-        if (samples.Length < 2)
-        {
-            string waiting = "Collecting samples";
-            float2 waitingSize = ImGui.CalcTextSize(waiting);
-            float2 waitingPos = new float2(x0 + (side - waitingSize.X) * 0.5f, y + (side - waitingSize.Y) * 0.5f);
-            dl.AddText(in waitingPos, ToColor(LabelColor), waiting);
-            return y + side + 8f;
-        }
-
-        float min = samples[0];
-        float max = samples[0];
-        for (int i = 1; i < samples.Length; i++)
-        {
-            float v = samples[i];
-            if (v < min) min = v;
-            if (v > max) max = v;
-        }
-        float latest = samples[samples.Length - 1];
-
-        string stats = $"min {FormatAxisValue(min, 0.01f)}   max {FormatAxisValue(max, 0.01f)}   now {FormatAxisValue(latest, 0.01f)}";
-        float2 statsPos = new float2(x0 + 8f, y + 6f + lineHeight + 2f);
-        dl.AddText(in statsPos, ToColor(LabelColor), stats);
-
-        float topMargin = 6f + lineHeight * 2f + 12f;
-        float bottomMargin = lineHeight * 2f + 14f;
-        float plotTop = y + topMargin;
-        float plotBottom = y + side - bottomMargin;
-        float plotHeight = Math.Max(20f, plotBottom - plotTop);
-
-        int maxTicks = Math.Clamp((int)(plotHeight / (lineHeight * 2.2f)), 3, 8);
-        NiceAxis(min, max, maxTicks, out float axisMin, out float axisMax, out float step);
-        float axisRange = axisMax - axisMin;
-        int tickCount = Math.Clamp((int)MathF.Round(axisRange / step), 1, 20);
-
-        float labelWidth = 0f;
-        for (int i = 0; i <= tickCount; i++)
-            labelWidth = Math.Max(labelWidth, ImGui.CalcTextSize(FormatAxisValue(axisMin + i * step, step)).X);
-
-        float plotLeft = x0 + labelWidth + 14f;
-        float plotRight = x0 + side - 12f;
-        float plotWidth = Math.Max(20f, plotRight - plotLeft);
-
-        ImColor8 gridColor = ToColor(GraphGridColor);
-        ImColor8 labelColor = ToColor(LabelColor);
-
-        for (int i = 0; i <= tickCount; i++)
-        {
-            float value = axisMin + i * step;
-            float yy = plotBottom - (value - axisMin) / axisRange * plotHeight;
-            float2 gridStart = new float2(plotLeft, yy);
-            float2 gridEnd = new float2(plotRight, yy);
-            dl.AddLine(in gridStart, in gridEnd, gridColor);
-
-            string tickLabel = FormatAxisValue(value, step);
-            float2 tickSize = ImGui.CalcTextSize(tickLabel);
-            float2 tickPos = new float2(plotLeft - 6f - tickSize.X, yy - tickSize.Y * 0.5f);
-            dl.AddText(in tickPos, labelColor, tickLabel);
-        }
-
-        int divisions = Math.Clamp((int)(plotWidth / 80f), 1, 6);
-        for (int k = 0; k <= divisions; k++)
-        {
-            float xx = plotLeft + plotWidth * k / divisions;
-            float2 gridStart = new float2(xx, plotTop);
-            float2 gridEnd = new float2(xx, plotBottom);
-            dl.AddLine(in gridStart, in gridEnd, gridColor);
-
-            int samplesAgo = (int)MathF.Round((samples.Length - 1) * (1f - (float)k / divisions));
-            string tickLabel = k == divisions ? "now" : $"-{samplesAgo}";
-            float2 tickSize = ImGui.CalcTextSize(tickLabel);
-            float tickX = Math.Clamp(xx - tickSize.X * 0.5f, x0 + 2f, x0 + side - tickSize.X - 2f);
-            float2 tickPos = new float2(tickX, plotBottom + 4f);
-            dl.AddText(in tickPos, labelColor, tickLabel);
-        }
-
-        string axisTitle = "samples ago";
-        float2 axisTitleSize = ImGui.CalcTextSize(axisTitle);
-        float2 axisTitlePos = new float2(plotLeft + (plotWidth - axisTitleSize.X) * 0.5f, y + side - lineHeight - 6f);
-        dl.AddText(in axisTitlePos, labelColor, axisTitle);
-
-        ImColor8 axisColor = ToColor(BorderColor);
-        float2 axisOrigin = new float2(plotLeft, plotBottom);
-        float2 axisTop = new float2(plotLeft, plotTop);
-        float2 axisRight = new float2(plotRight, plotBottom);
-        dl.AddLine(in axisOrigin, in axisTop, axisColor);
-        dl.AddLine(in axisOrigin, in axisRight, axisColor);
-
-        ImColor8 lineColor = ToColor(GraphLineColor);
-        int pointCount = Math.Min(samples.Length, Math.Max(2, (int)plotWidth));
-        float2 previous = default;
-        for (int k = 0; k < pointCount; k++)
-        {
-            int index = (int)MathF.Round(k * (samples.Length - 1) / (float)(pointCount - 1));
-            float value = samples[index];
-            float px = plotLeft + plotWidth * k / (pointCount - 1);
-            float py = plotBottom - (value - axisMin) / axisRange * plotHeight;
-            float2 point = new float2(px, py);
-            if (k > 0)
-            {
-                dl.AddLine(in previous, in point, lineColor);
-                float2 shiftedPrevious = new float2(previous.X, previous.Y + 1f);
-                float2 shiftedPoint = new float2(point.X, point.Y + 1f);
-                dl.AddLine(in shiftedPrevious, in shiftedPoint, lineColor);
-            }
-            previous = point;
-        }
-
-        float2 markerMin = new float2(previous.X - 3f, previous.Y - 3f);
-        float2 markerMax = new float2(previous.X + 3f, previous.Y + 3f);
-        dl.AddRectFilled(in markerMin, in markerMax, ToColor(ValueColor));
-
-        return y + side + 8f;
-    }
-
-    public static string FormatAxisValue(float value, float step)
-    {
-        float abs = Math.Abs(value);
-        if (abs >= 1_000_000f)
-            return $"{value / 1_000_000f:0.##}M";
-        if (abs >= 1000f)
-            return $"{value / 1000f:0.##}k";
-        if (step >= 1f)
-            return $"{value:F0}";
-        if (step >= 0.1f)
-            return $"{value:F1}";
-        if (step >= 0.01f)
-            return $"{value:F2}";
-        return $"{value:F3}";
-    }
-
-    private static void NiceAxis(float min, float max, int maxTicks, out float axisMin, out float axisMax, out float step)
-    {
-        float range = max - min;
-        if (range < 1e-6f)
-        {
-            float pad = Math.Max(Math.Abs(max) * 0.1f, 1f);
-            min -= pad;
-            max += pad;
-            range = max - min;
-        }
-
-        float rough = range / Math.Max(1, maxTicks - 1);
-        float magnitude = MathF.Pow(10f, MathF.Floor(MathF.Log10(rough)));
-        float normalized = rough / magnitude;
-        float nice = normalized <= 1f ? 1f : normalized <= 2f ? 2f : normalized <= 5f ? 5f : 10f;
-        step = nice * magnitude;
-        axisMin = MathF.Floor(min / step) * step;
-        axisMax = MathF.Ceiling(max / step) * step;
     }
 
     public static float DrawSliderRow(
@@ -523,8 +408,8 @@ internal static class PanelKit
         ImGui.ColorEdit4("Header text"u8, ref HeaderColor, ImGuiColorEditFlags.NoInputs);
         ImGui.ColorEdit4("Label text"u8, ref LabelColor, ImGuiColorEditFlags.NoInputs);
         ImGui.ColorEdit4("Value text"u8, ref ValueColor, ImGuiColorEditFlags.NoInputs);
-        ImGui.ColorEdit4("Warning text"u8, ref WarningColor, ImGuiColorEditFlags.NoInputs);
-        ImGui.ColorEdit4("Good text"u8, ref GoodColor, ImGuiColorEditFlags.NoInputs);
+        ImGui.ColorEdit4("Warning and alert"u8, ref WarningColor, ImGuiColorEditFlags.NoInputs);
+        ImGui.ColorEdit4("Good and fuel gauge"u8, ref GoodColor, ImGuiColorEditFlags.NoInputs);
 
         ImGui.Text("Graph colors"u8);
         ImGui.ColorEdit4("Graph background"u8, ref GraphBgColor, ImGuiColorEditFlags.NoInputs);

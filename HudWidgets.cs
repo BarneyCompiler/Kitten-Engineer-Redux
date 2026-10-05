@@ -21,6 +21,7 @@ internal enum HudWidget
     Thrust,
     VerticalSpeed,
     Acceleration,
+    Fuel,
 }
 
 internal readonly record struct HudWidgetContext(
@@ -30,7 +31,9 @@ internal readonly record struct HudWidgetContext(
     float MaximumTwr,
     float Mass,
     float Thrust,
-    float AccelerationG);
+    float AccelerationG,
+    float TotalFuelFraction,
+    float ActiveStageFuelFraction);
 
 internal static class HudWidgets
 {
@@ -43,15 +46,38 @@ internal static class HudWidgets
     private static readonly HudWidget[] All = Enum.GetValues<HudWidget>();
     private static readonly List<HudWidget> Selected = new(Defaults);
 
-    public static void Build(HudWidgetContext context, out string[] labels, out string[] values)
+    public static List<string> GetSelectedNames()
+    {
+        var names = new List<string>(Selected.Count);
+        foreach (HudWidget widget in Selected)
+            names.Add(widget.ToString());
+        return names;
+    }
+
+    public static void SetSelected(IEnumerable<string> names)
+    {
+        var parsed = new List<HudWidget>();
+        foreach (string name in names)
+        {
+            if (Enum.TryParse(name, out HudWidget widget) && !parsed.Contains(widget) && parsed.Count < MaxWidgets)
+                parsed.Add(widget);
+        }
+        Selected.Clear();
+        Selected.AddRange(parsed);
+    }
+
+    public static void Build(HudWidgetContext context, out string[] labels, out string[] values, out bool[] warnings)
     {
         int count = Selected.Count;
         labels = new string[count];
         values = new string[count];
+        warnings = new bool[count];
         for (int i = 0; i < count; i++)
         {
             labels[i] = TileLabel(Selected[i]);
             values[i] = Value(Selected[i], context);
+            AlertMetric? metric = AlertFor(Selected[i]);
+            warnings[i] = metric.HasValue && HudAlerts.IsTriggered(metric.Value);
         }
     }
 
@@ -87,13 +113,13 @@ internal static class HudWidgets
             DrawText(dl, start.X + 4f, textY, PanelKit.ValueColor, $"{i + 1}. {Name(Selected[i])}");
 
             float x = right - ButtonWidth * 3f - 8f;
-            if (MiniButton(dl, "^", $"##KerWUp{i}", new float2(x, y + 2f), ButtonWidth, buttonHeight) && i > 0)
+            if (PanelKit.DrawMiniButton(dl, "^", $"##KerWUp{i}", new float2(x, y + 2f), ButtonWidth, buttonHeight) && i > 0)
                 moveUp = i;
             x += ButtonWidth + 4f;
-            if (MiniButton(dl, "v", $"##KerWDown{i}", new float2(x, y + 2f), ButtonWidth, buttonHeight) && i < Selected.Count - 1)
+            if (PanelKit.DrawMiniButton(dl, "v", $"##KerWDown{i}", new float2(x, y + 2f), ButtonWidth, buttonHeight) && i < Selected.Count - 1)
                 moveDown = i;
             x += ButtonWidth + 4f;
-            if (MiniButton(dl, "x", $"##KerWRemove{i}", new float2(x, y + 2f), ButtonWidth, buttonHeight))
+            if (PanelKit.DrawMiniButton(dl, "x", $"##KerWRemove{i}", new float2(x, y + 2f), ButtonWidth, buttonHeight))
                 remove = i;
             y += rowHeight;
         }
@@ -116,7 +142,7 @@ internal static class HudWidgets
 
             float textY = y + (rowHeight - lineHeight) * 0.5f;
             DrawText(dl, start.X + 4f, textY, PanelKit.LabelColor, Name(widget));
-            if (MiniButton(dl, "Add", $"##KerWAdd{(int)widget}", new float2(right - ButtonWidth * 2f, y + 2f), ButtonWidth * 2f, buttonHeight)
+            if (PanelKit.DrawMiniButton(dl, "Add", $"##KerWAdd{(int)widget}", new float2(right - ButtonWidth * 2f, y + 2f), ButtonWidth * 2f, buttonHeight)
                 && Selected.Count < MaxWidgets)
                 add = (int)widget;
             y += rowHeight;
@@ -159,17 +185,21 @@ internal static class HudWidgets
         dl.AddText(in pos, PanelKit.ToColor(color), text);
     }
 
-    private static bool MiniButton(ImDrawListPtr dl, string label, string id, float2 pos, float width, float height)
+    private static AlertMetric? AlertFor(HudWidget widget) => widget switch
     {
-        ImGui.SetCursorScreenPos(pos);
-        bool clicked = ImGui.InvisibleButton(id, new float2(width, height));
-        float2 max = pos + new float2(width, height);
-        dl.AddRectFilled(in pos, in max, PanelKit.ToColor(PanelKit.ToggleOffColor), PanelKit.CornerRadius);
-        float2 textSize = ImGui.CalcTextSize(label);
-        float2 textPos = pos + new float2((width - textSize.X) * 0.5f, (height - textSize.Y) * 0.5f);
-        dl.AddText(in textPos, PanelKit.ToColor(PanelKit.ValueColor), label);
-        return clicked;
-    }
+        HudWidget.Apoapsis => AlertMetric.ApoapsisAltitude,
+        HudWidget.Periapsis => AlertMetric.PeriapsisAltitude,
+        HudWidget.DeltaV => AlertMetric.TotalDeltaV,
+        HudWidget.Twr => AlertMetric.ActualTwr,
+        HudWidget.MaxTwr => AlertMetric.MaximumTwr,
+        HudWidget.Altitude => AlertMetric.Altitude,
+        HudWidget.TimeToApoapsis => AlertMetric.TimeToApoapsis,
+        HudWidget.TimeToPeriapsis => AlertMetric.TimeToPeriapsis,
+        HudWidget.VerticalSpeed => AlertMetric.VerticalSpeed,
+        HudWidget.Acceleration => AlertMetric.Acceleration,
+        HudWidget.Fuel => AlertMetric.TotalFuel,
+        _ => null,
+    };
 
     private static string Name(HudWidget widget) => widget switch
     {
@@ -186,6 +216,7 @@ internal static class HudWidgets
         HudWidget.Thrust => "Thrust (actual)",
         HudWidget.VerticalSpeed => "Vertical speed",
         HudWidget.Acceleration => "Acceleration",
+        HudWidget.Fuel => "Fuel remaining",
         _ => string.Empty,
     };
 
@@ -204,6 +235,7 @@ internal static class HudWidgets
         HudWidget.Thrust => "THRUST",
         HudWidget.VerticalSpeed => "VERT SPEED",
         HudWidget.Acceleration => "ACCEL",
+        HudWidget.Fuel => "FUEL",
         _ => string.Empty,
     };
 
@@ -222,6 +254,7 @@ internal static class HudWidgets
         HudWidget.Thrust => PanelKit.FormatThrust(c.Thrust),
         HudWidget.VerticalSpeed => $"{c.Orbit.VerticalVelocity:F1} m/s",
         HudWidget.Acceleration => $"{c.AccelerationG:F2} g",
+        HudWidget.Fuel => float.IsNaN(c.TotalFuelFraction) ? "--" : $"{c.TotalFuelFraction * 100f:F0}%",
         _ => string.Empty,
     };
 }

@@ -21,6 +21,8 @@ internal record struct SequenceBurnInfo
     public float FuelMass;
     public float MaxFuelMass;
     public float FuelFraction;
+    public float FuelRemaining;
+    public float FuelCapacity;
     public float MassFlowRate;
     public float InitialTwr;
     public float MaxTwr;
@@ -148,6 +150,8 @@ internal static class SequenceAnalyzer
                 FuelMass = fuelMass,
                 MaxFuelMass = maxFuelMass,
                 FuelFraction = fuelFraction,
+                FuelRemaining = fuelMass,
+                FuelCapacity = maxFuelMass,
                 MassFlowRate = totalFlowRate,
                 InitialTwr = initialTwr,
                 MaxTwr = maxTwr,
@@ -183,6 +187,7 @@ internal static class SequenceAnalyzer
         }
 
         _pooledSequences.Clear();
+        _pooledFuelClaimedTankIds.Clear();
         var result = new VehicleBurnAnalysis
         {
             Sequences = _pooledSequences,
@@ -190,6 +195,7 @@ internal static class SequenceAnalyzer
             TotalBurnTime = 0f
         };
 
+        ReadOnlySpan<MoleState> moleStates = parts.Moles.States;
         usedNativeResults = true;
         for (int i = 0; i < sequences.Length; i++)
         {
@@ -206,6 +212,7 @@ internal static class SequenceAnalyzer
                 burnTime = native.BurnedFuelMass / native.MassFlowRate;
 
             int engineCount = 0;
+            _pooledEngines.Clear();
             HashSet<Part>? attachedParts = native.AttachedParts;
             if (attachedParts != null)
             {
@@ -215,7 +222,10 @@ internal static class SequenceAnalyzer
                     for (int engineIndex = 0; engineIndex < engines.Length; engineIndex++)
                     {
                         if (engines[engineIndex].Sequence == sequence.Number)
+                        {
                             engineCount++;
+                            _pooledEngines.Add(engines[engineIndex]);
+                        }
                     }
                 }
             }
@@ -224,6 +234,8 @@ internal static class SequenceAnalyzer
                 foreach (SequencePhaseInfo phase in phases)
                     engineCount = Math.Max(engineCount, phase.ActiveEngineCount);
             }
+
+            var (fuelRemaining, fuelCapacity) = ComputeSequenceFuel(_pooledEngines, _pooledFuelClaimedTankIds, moleStates);
 
             string feedSummary = BuildFeedSummary(native.Propellants);
             bool feedWarning = engineCount > 0 &&
@@ -261,7 +273,9 @@ internal static class SequenceAnalyzer
                 EndMass = endMass,
                 FuelMass = native.FuelMass,
                 MaxFuelMass = native.FuelMass,
-                FuelFraction = native.FuelMass > 0f ? native.BurnedFuelMass / native.FuelMass : 0f,
+                FuelFraction = fuelCapacity > 0f ? fuelRemaining / fuelCapacity : 0f,
+                FuelRemaining = fuelRemaining,
+                FuelCapacity = fuelCapacity,
                 MassFlowRate = native.MassFlowRate,
                 InitialTwr = initialTwr,
                 MaxTwr = maxTwr,
