@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -21,40 +21,44 @@
 
     <ItemGroup>
         <Reference Include="KSA">
-            <HintPath>C:\Program Files\Kitten Space Agency\KSA.dll</HintPath>
+            <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\KSA.dll</HintPath>
             <Private>false</Private>
         </Reference>
 
         <Reference Include="BepuUtilities">
-          <HintPath>C:\Program Files\Kitten Space Agency\BepuUtilities.dll</HintPath>
+          <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\BepuUtilities.dll</HintPath>
           <Private>false</Private>
         </Reference>
-        <Reference Include="Brutal.Core.Common">
-          <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Common.dll</HintPath>
+        <Reference Include="Brutal.Common">
+          <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.Common.dll</HintPath>
           <Private>false</Private>
         </Reference>
-        <Reference Include="Brutal.Core.Logging">
-          <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Logging.dll</HintPath>
+        <Reference Include="Brutal.Core">
+          <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.Core.dll</HintPath>
           <Private>false</Private>
         </Reference>
-        <Reference Include="Brutal.Core.Numerics">
-            <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Numerics.dll</HintPath>
+        <Reference Include="Brutal.Logging">
+          <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.Logging.dll</HintPath>
+          <Private>false</Private>
+        </Reference>
+        <Reference Include="Brutal.Numerics">
+            <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.Numerics.dll</HintPath>
             <Private>false</Private>
         </Reference>
         <Reference Include="Brutal.Glfw">
-            <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Glfw.dll</HintPath>
+            <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.Glfw.dll</HintPath>
             <Private>false</Private>
         </Reference>
         <Reference Include="Brutal.ImGui">
-            <HintPath>C:\Program Files\Kitten Space Agency\Brutal.ImGui.dll</HintPath>
+            <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.ImGui.dll</HintPath>
             <Private>false</Private>
         </Reference>
         <Reference Include="Brutal.ImGui.Extensions">
-            <HintPath>C:\Program Files\Kitten Space Agency\Brutal.ImGui.Extensions.dll</HintPath>
+            <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.ImGui.Extensions.dll</HintPath>
             <Private>false</Private>
         </Reference>
-        <Reference Include="Brutal.Core.Strings">
-            <HintPath>C:\Program Files\Kitten Space Agency\Brutal.Core.Strings.dll</HintPath>
+        <Reference Include="Brutal.Strings">
+            <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.Strings.dll</HintPath>
             <Private>false</Private>
         </Reference>
     </ItemGroup>

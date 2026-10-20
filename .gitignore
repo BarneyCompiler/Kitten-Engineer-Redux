@@ -1,4 +1,5 @@
 KSA_Source/
 bin/
-dis/
+dist/
 obj/
+.kilo/
