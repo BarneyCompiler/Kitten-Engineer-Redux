@@ -129,7 +129,7 @@ internal static class FlightHud
 
         float livePressure = (float)vehicle.PhysicsEnvironment.AtmosphericPressure;
         f.Engine = ActiveEngineThrust.ComputeActual(vehicle.Parts);
-        f.MaximumThrust = vehicle.ComputeActiveThrust(livePressure);
+        f.MaximumThrust = ActiveEngineThrust.Compute(vehicle.Parts, livePressure).TotalThrust;
         float currentGravity = EnvironmentHelpers.ComputeSurfaceGravity(
             vehicle.Parent, Math.Max(0f, vehicle.GetBarometricAltitude()));
         f.Mass = vehicle.TotalMass;

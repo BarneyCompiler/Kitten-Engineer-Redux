@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using KSA;
 
 namespace KittenEngineerRedux.Editor;

@@ -16,22 +16,16 @@ internal static class EnvironmentHelpers
 
     public static float GetAtmosphereHeight(IParentBody? body)
     {
-        if (body is not Astronomical astro)
-            return 0f;
-
-        var atmosphere = astro.GetAtmosphereReference();
-        return atmosphere == null ? 0f : Math.Max(0f, (float)(double)atmosphere.Physical.Height);
+        var atmosphere = body?.GetPhysicalAtmosphere();
+        return atmosphere == null ? 0f : Math.Max(0f, (float)atmosphere.Height);
     }
 
     public static float GetAtmosphericPressureAtAltitude(IParentBody? body, double altitudeMeters)
     {
-        if (body is not Astronomical astro)
-            return 0f;
-
-        var atmosphere = astro.GetAtmosphereReference();
+        var atmosphere = body?.GetPhysicalAtmosphere();
         return atmosphere == null
             ? 0f
-            : (float)atmosphere.Physical.GetAtmosphericPressureAtAltitude(Math.Max(0.0, altitudeMeters));
+            : (float)atmosphere.ComputePressureAtAltitude(Math.Max(0.0, altitudeMeters));
     }
 
 }

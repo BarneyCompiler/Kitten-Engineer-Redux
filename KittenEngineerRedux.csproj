@@ -15,8 +15,7 @@
         <PackageReference Include="Lib.Harmony" Version="2.4.2">
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="ModMenu.Attributes" Version="1.0.2" />
-        <PackageReference Include="StarMap.API" Version="0.3.6" />
+        <PackageReference Include="StarMap.API" Version="0.5.4" />
     </ItemGroup>
 
     <ItemGroup>
@@ -72,7 +71,6 @@
     <Target Name="PostBuild" AfterTargets="PostBuildEvent">
         <PropertyGroup>
             <SourceDll>$(TargetDir)KittenEngineerRedux.dll</SourceDll>
-            <SourceAttributesDll>$(TargetDir)ModMenu.Attributes.dll</SourceAttributesDll>
             <DestinationDir>C:\Users\Matthew\Documents\My Games\Kitten Space Agency\mods\KittenEngineerRedux\</DestinationDir>
         </PropertyGroup>
         
@@ -81,7 +79,6 @@
         <MakeDir Directories="$(DestinationDir)" Condition="!Exists('$(DestinationDir)')" />
         
         <Copy SourceFiles="$(SourceDll)" DestinationFolder="$(DestinationDir)" SkipUnchangedFiles="false" />
-        <Copy SourceFiles="$(SourceAttributesDll)" DestinationFolder="$(DestinationDir)" SkipUnchangedFiles="false" Condition="Exists('$(SourceAttributesDll)')" />
         
         <Message Importance="High" Text="Mod successfully deployed to: $(DestinationDir)" />
     </Target>
