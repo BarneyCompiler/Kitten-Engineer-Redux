@@ -93,7 +93,7 @@ internal static class FlightHud
         }
     }
 
-    public static void Draw(Vehicle vehicle, GameViewport viewport)
+    public static void Draw(Vehicle vehicle, IGameViewport viewport)
     {
         SettingsStore.Tick();
 

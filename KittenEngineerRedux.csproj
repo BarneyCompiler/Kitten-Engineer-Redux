@@ -4,6 +4,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+        <KsaDirectory Condition="'$(KsaDirectory)' == ''">C:\Program Files\Ahwoo\Games\Kitten Space Agency</KsaDirectory>
     </PropertyGroup>
 
     <ItemGroup>
@@ -11,53 +12,50 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
-        <PackageReference Include="Lib.Harmony" Version="2.4.2">
+        <!-- KSA and StarMap supply these assemblies at runtime. -->
+        <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" PrivateAssets="all" ExcludeAssets="runtime" />
+        <PackageReference Include="Lib.Harmony" Version="2.4.2" ExcludeAssets="runtime">
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="StarMap.API" Version="0.5.4" />
+        <PackageReference Include="StarMap.API" Version="0.5.4" PrivateAssets="all" ExcludeAssets="runtime" />
     </ItemGroup>
 
     <ItemGroup>
         <Reference Include="KSA">
-            <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\KSA.dll</HintPath>
+            <HintPath>$(KsaDirectory)/KSA.dll</HintPath>
             <Private>false</Private>
         </Reference>
 
         <Reference Include="BepuUtilities">
-          <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\BepuUtilities.dll</HintPath>
-          <Private>false</Private>
-        </Reference>
-        <Reference Include="Brutal.Common">
-          <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.Common.dll</HintPath>
+          <HintPath>$(KsaDirectory)/BepuUtilities.dll</HintPath>
           <Private>false</Private>
         </Reference>
         <Reference Include="Brutal.Core">
-          <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.Core.dll</HintPath>
+          <HintPath>$(KsaDirectory)/Brutal.Core.dll</HintPath>
           <Private>false</Private>
         </Reference>
         <Reference Include="Brutal.Logging">
-          <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.Logging.dll</HintPath>
+          <HintPath>$(KsaDirectory)/Brutal.Logging.dll</HintPath>
           <Private>false</Private>
         </Reference>
         <Reference Include="Brutal.Numerics">
-            <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.Numerics.dll</HintPath>
+            <HintPath>$(KsaDirectory)/Brutal.Numerics.dll</HintPath>
             <Private>false</Private>
         </Reference>
         <Reference Include="Brutal.Glfw">
-            <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.Glfw.dll</HintPath>
+            <HintPath>$(KsaDirectory)/Brutal.Glfw.dll</HintPath>
             <Private>false</Private>
         </Reference>
         <Reference Include="Brutal.ImGui">
-            <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.ImGui.dll</HintPath>
+            <HintPath>$(KsaDirectory)/Brutal.ImGui.dll</HintPath>
             <Private>false</Private>
         </Reference>
         <Reference Include="Brutal.ImGui.Extensions">
-            <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.ImGui.Extensions.dll</HintPath>
+            <HintPath>$(KsaDirectory)/Brutal.ImGui.Extensions.dll</HintPath>
             <Private>false</Private>
         </Reference>
         <Reference Include="Brutal.Strings">
-            <HintPath>C:\Program Files\Ahwoo\Games\Kitten Space Agency\Brutal.Strings.dll</HintPath>
+            <HintPath>$(KsaDirectory)/Brutal.Strings.dll</HintPath>
             <Private>false</Private>
         </Reference>
     </ItemGroup>
@@ -68,18 +66,12 @@
         </None>
     </ItemGroup>
 
-    <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-        <PropertyGroup>
-            <SourceDll>$(TargetDir)KittenEngineerRedux.dll</SourceDll>
-            <DestinationDir>C:\Users\Matthew\Documents\My Games\Kitten Space Agency\mods\KittenEngineerRedux\</DestinationDir>
-        </PropertyGroup>
-        
-        <Message Importance="High" Text="Executing Post-Build Deployment..." />
-        
-        <MakeDir Directories="$(DestinationDir)" Condition="!Exists('$(DestinationDir)')" />
-        
-        <Copy SourceFiles="$(SourceDll)" DestinationFolder="$(DestinationDir)" SkipUnchangedFiles="false" />
-        
-        <Message Importance="High" Text="Mod successfully deployed to: $(DestinationDir)" />
+    <Target Name="DeployMod" AfterTargets="Build" Condition="'$(ModDeployDir)' != ''">
+        <ItemGroup>
+            <ModFiles Include="$(TargetPath);$(TargetDir)$(AssemblyName).deps.json;$(TargetDir)mod.toml" />
+        </ItemGroup>
+        <MakeDir Directories="$(ModDeployDir)" />
+        <Copy SourceFiles="@(ModFiles)" DestinationFolder="$(ModDeployDir)" />
+        <Message Importance="High" Text="Mod successfully deployed to: $(ModDeployDir)" />
     </Target>
 </Project>
