@@ -5,6 +5,8 @@ using KSA;
 using Brutal.Logging;
 using HarmonyLib;
 using KittenEngineerRedux.Analysis;
+using KittenEngineerRedux.Editor;
+using KittenEngineerRedux.Flight;
 using StarMap.API;
 using StarMap.API.Services;
 
@@ -14,8 +16,9 @@ namespace KittenEngineerRedux;
 public sealed class Mod
 {
     private static Harmony? _harmony;
-    private readonly IModMenuService? _menuService;
-    private IDisposable? _menuItem;
+    private readonly IModMenuService _menuService;
+    private IDisposable? _flightHudMenuItem;
+    private IDisposable? _editorPanelMenuItem;
 
     // Constructor injection for StarMap services
     public Mod(IModMenuService menuService)
@@ -29,11 +32,13 @@ public sealed class Mod
         _harmony = new Harmony("com.matthew.kittenengineerredux");
         _harmony.PatchAll(typeof(Mod).Assembly);
         
-        // Register the in-game menu item using StarMap's native API
-        _menuItem = _menuService?.AddModMenuItem(
-            "Kitten Engineer Redux", 
-            () => KittenEngineerRedux.UI.MenuContent.DrawToggles()
-        );
+        // StarMap invokes these actions on click; they are not submenu renderers.
+        _flightHudMenuItem = _menuService.AddModMenuItem(
+            "Kitten Engineer Redux: Flight HUD",
+            () => FlightHud.Visible = !FlightHud.Visible);
+        _editorPanelMenuItem = _menuService.AddModMenuItem(
+            "Kitten Engineer Redux: Editor Panel",
+            () => EditorPanel.Visible = !EditorPanel.Visible);
 
         DefaultCategory.Log.Info("[KER] Loaded and patched.");
     }
@@ -41,7 +46,8 @@ public sealed class Mod
     [StarMapUnload]
     public void Unload()
     {
-        _menuItem?.Dispose();
+        _flightHudMenuItem?.Dispose();
+        _editorPanelMenuItem?.Dispose();
         _harmony?.UnpatchAll(_harmony.Id);
         _harmony = null;
         SequenceAnalyzer.ResetPools();

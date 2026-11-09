@@ -60,7 +60,7 @@ internal static class SectionHost
         return y;
     }
 
-    public static void DrawFloating(HudSection section, GameViewport viewport, int index)
+    public static void DrawFloating(HudSection section, IGameViewport viewport, int index)
     {
         if (!section.Popped)
             return;
