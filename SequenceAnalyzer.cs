@@ -99,7 +99,7 @@ internal static class SequenceAnalyzer
             {
                 foreach (EngineController engine in _pooledEngines)
                 {
-                    var data = RocketControllerData.ComputeFromCores(engine.Cores.AsSpan(), ambientPressure, 1f);
+                    var data = RocketControllerData.ComputeFromRockets(engine.Rockets.AsSpan(), ambientPressure, 1f);
                     totalThrust += data.ThrustMax.Length();
                     totalFlowRate += data.MassFlowRateMax;
                 }
@@ -353,13 +353,16 @@ internal static class SequenceAnalyzer
         float totalMax = 0f;
         foreach (EngineController engine in engines)
         {
-            foreach (RocketCore core in engine.Cores)
+            foreach (Rocket rocket in engine.Rockets)
             {
-                if (core is not PlumbedCore { ResourceManager: { } resourceManager })
-                    continue;
-                var (current, max) = WalkReachableTanks(resourceManager, fuelClaimedTankIds, moleStates);
-                totalCurrent += current;
-                totalMax += max;
+                foreach (RocketCore core in rocket.Cores)
+                {
+                    if (core is not PlumbedCore { ResourceManager: { } resourceManager })
+                        continue;
+                    var (current, max) = WalkReachableTanks(resourceManager, fuelClaimedTankIds, moleStates);
+                    totalCurrent += current;
+                    totalMax += max;
+                }
             }
         }
         return (totalCurrent, totalMax);

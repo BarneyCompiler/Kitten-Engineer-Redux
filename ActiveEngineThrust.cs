@@ -20,9 +20,9 @@ internal static class ActiveEngineThrust
             if (!engine.IsActive)
                 continue;
 
-            foreach (RocketCore core in engine.Cores)
+            foreach (Rocket rocket in engine.Rockets)
             {
-                var nozzles = parts.RocketNozzles.GetModulesAndStates(core.Rocket.Nozzles.AsSpan()).GetEnumerator();
+                var nozzles = parts.RocketNozzles.GetModulesAndStates(rocket.Nozzles.AsSpan()).GetEnumerator();
                 while (nozzles.MoveNext())
                 {
                     var nozzle = nozzles.Current;
@@ -48,7 +48,7 @@ internal static class ActiveEngineThrust
 
             if (ambientPressure > 0f)
             {
-                var data = RocketControllerData.ComputeFromCores(engine.Cores.AsSpan(), ambientPressure, 1f);
+                var data = RocketControllerData.ComputeFromRockets(engine.Rockets.AsSpan(), ambientPressure, 1f);
                 totalThrust += data.ThrustMax.Length();
                 totalFlowRate += data.MassFlowRateMax;
             }
